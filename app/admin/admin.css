@@ -1,0 +1,171 @@
+.admin-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 3rem;
+}
+
+.stat-card {
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: hsl(var(--primary));
+}
+
+.stat-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: hsl(var(--muted-foreground));
+}
+
+.admin-table-container {
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th {
+    text-align: left;
+    padding: 1rem;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+    border-bottom: 1px solid hsl(var(--border));
+}
+
+td {
+    padding: 1rem;
+    border-bottom: 1px solid hsla(var(--border), 0.5);
+}
+
+.admin-nav {
+    display: flex;
+    gap: 2rem;
+    margin-bottom: 3rem;
+    border-bottom: 1px solid hsl(var(--border));
+    padding-bottom: 1rem;
+}
+
+.admin-nav a {
+    text-decoration: none;
+    color: hsl(var(--muted-foreground));
+    font-weight: 500;
+    transition: color 0.2s;
+}
+
+.admin-nav a.active {
+    color: hsl(var(--primary));
+}
+
+.action-btn {
+    background: none;
+    border: 1px solid hsl(var(--border));
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    color: white;
+    cursor: pointer;
+}
+
+.action-btn:hover {
+    background: hsla(var(--primary), 0.1);
+    border-color: hsl(var(--primary));
+}
+
+/* Modal and Detailed View Styles */
+.modal-overlay {
+    backdrop-filter: blur(8px);
+}
+
+.detail-item label {
+    font-weight: 600;
+}
+
+.management-actions {
+    background: hsla(var(--background), 0.3);
+}
+
+.form-group label {
+    display: block;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: hsl(var(--muted-foreground));
+}
+
+.form-control {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    color: white;
+    transition: all 0.2s ease;
+    font-family: inherit;
+    color-scheme: dark;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 2px hsla(var(--primary), 0.2);
+}
+
+.badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 99px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.badge-pending {
+    background: hsla(var(--primary), 0.1);
+    color: hsl(var(--primary));
+    border: 1px solid hsla(var(--primary), 0.2);
+}
+
+.badge-rejected {
+    background: hsla(var(--destructive), 0.1);
+    color: hsl(var(--destructive));
+    border: 1px solid hsla(var(--destructive), 0.2);
+}
+
+.ticket-badge {
+    background: hsla(var(--primary), 0.2);
+    color: hsl(var(--primary));
+    padding: 0.5rem 1rem;
+    border-radius: 99px;
+    font-weight: 700;
+    border: 1px solid hsla(var(--primary), 0.3);
+}
+
+@keyframes scaleIn {
+    from {
+        transform: scale(0.95);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.animate-scale-in {
+    animation: scaleIn 0.2s ease-out;
+}

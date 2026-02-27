@@ -1,0 +1,62 @@
+.list-container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 4rem 1rem;
+}
+
+.search-section {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2.5rem;
+}
+
+.request-list-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.list-card {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 2rem;
+    padding: 1.5rem 2rem;
+}
+
+.ticket-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.ticket-id {
+    font-size: 0.75rem;
+    color: hsla(var(--primary), 0.8);
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+}
+
+.ticket-title {
+    font-weight: 600;
+    font-size: 1.125rem;
+}
+
+.ticket-meta {
+    color: hsl(var(--muted-foreground));
+    font-size: 0.875rem;
+}
+
+.ticket-actions {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.observation-box {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-left: 2px solid hsl(var(--primary));
+    font-size: 0.875rem;
+    color: hsl(var(--muted-foreground));
+}
