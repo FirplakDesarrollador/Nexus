@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Send, Package, Truck, Shield, Users, CreditCard, CheckCircle2, X } from 'lucide-react'
@@ -17,7 +17,7 @@ const SuccessModal = ({ ticket, onClose }: { ticket: string, onClose: () => void
             <p>Tu requerimiento ha sido creado con éxito bajo el ticket:</p>
             <div className="ticket-badge">{ticket}</div>
             <p className="modal-footer-text">Nallely recibirá una notificación para iniciar la revisión.</p>
-            <button onClick={onClose} className="btn-primary" style={{ width: '100%', marginTop: '1rem' }}>
+            <button type="button" onClick={onClose} className="btn-primary" style={{ width: '100%', marginTop: '1rem' }}>
                 Entendido
             </button>
         </div>
@@ -160,7 +160,7 @@ export default function NewRequestPage() {
                                         style={{ flex: 1 }}
                                         min="1"
                                         value={form.quantity}
-                                        onChange={e => {
+                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                                             const val = e.target.value;
                                             setForm({ ...form, quantity: val === '' ? 0 : parseInt(val) })
                                         }}
@@ -198,7 +198,7 @@ export default function NewRequestPage() {
                                 <label>¿Es Proveedor Exclusivo?</label>
                                 <select
                                     className="form-control"
-                                    value={form.exclusivity} onChange={e => setForm({ ...form, exclusivity: e.target.value })}
+                                    value={form.exclusivity} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({ ...form, exclusivity: e.target.value })}
                                 >
                                     <option value="NO">NO</option>
                                     <option value="SI">SI</option>
@@ -230,7 +230,7 @@ export default function NewRequestPage() {
                                 <label>Tipo de Operación</label>
                                 <select
                                     className="form-control"
-                                    value={form.operation_type} onChange={e => setForm({ ...form, operation_type: e.target.value })}
+                                    value={form.operation_type} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({ ...form, operation_type: e.target.value })}
                                 >
                                     <option value="PTS">PTS</option>
                                     <option value="PTO">PTO</option>
@@ -248,7 +248,7 @@ export default function NewRequestPage() {
                                 <label>Responsable de Recepción</label>
                                 <select
                                     className="form-control"
-                                    value={form.responsable_id} onChange={e => setForm({ ...form, responsable_id: e.target.value })}
+                                    value={form.responsable_id} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({ ...form, responsable_id: e.target.value })}
                                 >
                                     <option value="">Seleccione un usuario...</option>
                                     {users.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
@@ -258,7 +258,7 @@ export default function NewRequestPage() {
                                 <label>Fecha de Entrega Requerida</label>
                                 <input
                                     type="date" className="form-control"
-                                    value={form.delivery_date} onChange={e => setForm({ ...form, delivery_date: e.target.value })}
+                                    value={form.delivery_date} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, delivery_date: e.target.value })}
                                 />
                             </div>
                         </div>
@@ -299,8 +299,12 @@ export default function NewRequestPage() {
                             <label>Presupuesto Estimado (Opcional)</label>
                             <input
                                 type="number" className="form-control" placeholder="0.00"
-                                value={form.estimated_budget} onChange={e => setForm({ ...form, estimated_budget: e.target.value })}
+                                step="0.01"
+                                value={form.estimated_budget} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, estimated_budget: e.target.value })}
                             />
+                            <small style={{ color: '#888', fontSize: '0.8rem', marginTop: '4px', display: 'block' }}>
+                                * Ingresa el valor sin puntos ni comas para los miles (ej: 600000). Si usas decimales, sepáralos con punto (.).
+                            </small>
                         </div>
                     </section>
 
