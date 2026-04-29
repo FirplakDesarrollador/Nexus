@@ -170,7 +170,7 @@ export default function NewRequestPage() {
 
     useEffect(() => {
         const fetchData = async () => {
-            const { data: usersData } = await supabase.schema('nexus').from('users').select('id, nombre')
+            const { data: usersData } = await supabase.schema('nexus').from('users').select('id, nombre, email')
             const { data: ccData } = await supabase.schema('nexus')
                 .from('centros_costos')
                 .select('id, nombre, codigo, grupo')
