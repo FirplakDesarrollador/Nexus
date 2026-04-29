@@ -3,7 +3,11 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
-import { Search, MoreVertical, CheckCircle, XCircle, Clock, AlertTriangle, FileText, User as UserIcon, Building2, Wallet, Calendar, X } from 'lucide-react'
+import { 
+    Search, Filter, Calendar, User as UserIcon, Building2, Package, 
+    CreditCard, CheckCircle2, X, Eye, CheckCircle, XCircle, 
+    Truck, Wallet, Bell, AlertCircle, Clock, AlertTriangle, FileText
+} from 'lucide-react'
 import './admin.css'
 
 export default function AdminDashboard() {
@@ -14,6 +18,10 @@ export default function AdminDashboard() {
     const [stats, setStats] = useState({ pending: 0, inProgress: 0, urgent: 0, readyToClose: 0 })
     const [selectedRequest, setSelectedRequest] = useState<any | null>(null)
     const [isSaving, setIsSaving] = useState(false)
+    const [filterType, setFilterType] = useState('all')
+    const [searchTerm, setSearchTerm] = useState('')
+    const [comments, setComments] = useState<any[]>([])
+    const [newComment, setNewComment] = useState('')
 
     const router = useRouter()
 
@@ -64,22 +72,57 @@ export default function AdminDashboard() {
         }
     }
 
+    const fetchComments = async (requestId: string) => {
+        const { data } = await supabase.schema('nexus')
+            .from('solicitud_estados_hist')
+            .select(`
+                *,
+                actor:users!actor_id(nombre)
+            `)
+            .eq('solicitud_id', requestId)
+            .order('created_at', { ascending: false })
+        if (data) setComments(data)
+    }
+
     const handleUpdateStatus = async (id: string, newStatus: string, observation?: string) => {
         setIsSaving(true)
-        const { error } = await supabase.schema('nexus')
-            .from('solicitudes')
-            .update({
-                estado_actual: newStatus,
-                observacion_actual: observation || null,
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', id)
+        try {
+            const { data: { user } } = await supabase.auth.getUser()
+            
+            // 1. Update the request status and current observation
+            const { error: updateError } = await supabase.schema('nexus')
+                .from('solicitudes')
+                .update({ 
+                    estado_actual: newStatus,
+                    observacion_actual: observation || null,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', id)
 
-        if (!error) {
+            if (updateError) throw updateError
+
+            // 2. Insert into history if there is an observation
+            if (observation?.trim()) {
+                const { error: histError } = await supabase.schema('nexus')
+                    .from('solicitud_estados_hist')
+                    .insert({
+                        solicitud_id: id,
+                        estado: newStatus,
+                        observacion: observation,
+                        actor_id: user?.id
+                    })
+                if (histError) throw histError
+            }
+
+            // 3. Refresh data
             await fetchData()
+            await fetchComments(id)
+            setNewComment('')
             if (selectedRequest?.id === id) {
                 setSelectedRequest((prev: any) => prev ? { ...prev, estado_actual: newStatus, observacion_actual: observation } : null)
             }
+        } catch (err: any) {
+            alert('Error al actualizar: ' + err.message)
         }
         setIsSaving(false)
     }
@@ -102,6 +145,23 @@ export default function AdminDashboard() {
         }
         setIsSaving(false)
     }
+
+    const filteredRequests = requests.filter(req => {
+        const query = searchTerm.toLowerCase();
+        const matchesSearch = 
+            req.titulo.toLowerCase().includes(query) ||
+            req.ticket.toLowerCase().includes(query) ||
+            (req.solicitante as any)?.nombre.toLowerCase().includes(query);
+        
+        if (!matchesSearch) return false;
+
+        if (filterType === 'pending') return req.estado_actual === 'Revisión';
+        if (filterType === 'in-progress') return req.estado_actual !== 'Revisión';
+        if (filterType === 'urgent') return req.prioridad === 'Urgente';
+        if (filterType === 'ready-to-close') return req.estado_actual === 'Aprobado';
+        
+        return true;
+    });
 
     return (
         <div className="admin-container animate-fade-in">
@@ -127,22 +187,34 @@ export default function AdminDashboard() {
             </nav>
 
             <div className="stats-grid">
-                <div className="stat-card glass shadow-lg">
+                <div 
+                    className={`stat-card glass shadow-lg clickable ${filterType === 'pending' ? 'active' : ''}`}
+                    onClick={() => setFilterType(filterType === 'pending' ? 'all' : 'pending')}
+                >
                     <span className="stat-label">Pendientes</span>
                     <span className="stat-value">{stats.pending}</span>
                     <Clock size={20} style={{ opacity: 0.5 }} />
                 </div>
-                <div className="stat-card glass shadow-lg">
+                <div 
+                    className={`stat-card glass shadow-lg clickable ${filterType === 'in-progress' ? 'active' : ''}`}
+                    onClick={() => setFilterType(filterType === 'in-progress' ? 'all' : 'in-progress')}
+                >
                     <span className="stat-label">En Proceso</span>
                     <span className="stat-value">{stats.inProgress}</span>
                     <CheckCircle size={20} style={{ opacity: 0.5 }} />
                 </div>
-                <div className="stat-card glass shadow-lg">
+                <div 
+                    className={`stat-card glass shadow-lg clickable ${filterType === 'urgent' ? 'active' : ''}`}
+                    onClick={() => setFilterType(filterType === 'urgent' ? 'all' : 'urgent')}
+                >
                     <span className="stat-label">Urgentes</span>
-                    <span className="stat-value" style={{ color: 'hsl(var(--destructive))' }}>{stats.urgent}</span>
-                    <AlertTriangle size={20} style={{ color: 'hsl(var(--destructive))' }} />
+                    <span className="stat-value" style={{ color: '#ff4d4d' }}>{stats.urgent}</span>
+                    <AlertTriangle size={20} style={{ color: '#ff4d4d' }} />
                 </div>
-                <div className="stat-card glass shadow-lg">
+                <div 
+                    className={`stat-card glass shadow-lg clickable ${filterType === 'ready-to-close' ? 'active' : ''}`}
+                    onClick={() => setFilterType(filterType === 'ready-to-close' ? 'all' : 'ready-to-close')}
+                >
                     <span className="stat-label">Listas para Cierre</span>
                     <span className="stat-value" style={{ color: '#10b981' }}>{stats.readyToClose}</span>
                     <CheckCircle size={20} style={{ color: '#10b981' }} />
@@ -155,10 +227,29 @@ export default function AdminDashboard() {
                     <h1 style={{ margin: 0 }}>Reportes de Gestión</h1>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem', alignItems: 'center' }}>
-                    <h2>Lista Maestra de Solicitudes</h2>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <h2 style={{ margin: 0 }}>Lista Maestra de Solicitudes</h2>
+                        {filterType !== 'all' && (
+                            <span className="badge priority-urgente" style={{ textTransform: 'capitalize', fontSize: '0.7rem' }}>
+                                Filtrando por: {
+                                    filterType === 'pending' ? 'Pendientes' : 
+                                    filterType === 'in-progress' ? 'En Proceso' : 
+                                    filterType === 'urgent' ? 'Urgentes' : 'Listas para Cierre'
+                                }
+                                <X size={12} style={{ marginLeft: '0.5rem', cursor: 'pointer' }} onClick={() => setFilterType('all')} />
+                            </span>
+                        )}
+                    </div>
                     <div style={{ position: 'relative' }}>
                         <Search size={16} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
-                        <input type="text" className="form-control" placeholder="Buscar..." style={{ paddingLeft: '2.5rem', width: '300px' }} />
+                        <input 
+                            type="text" 
+                            className="form-control" 
+                            placeholder="Buscar por ticket, título o solicitante..." 
+                            style={{ paddingLeft: '2.5rem', width: '350px' }} 
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
                     </div>
                 </div>
 
@@ -170,6 +261,7 @@ export default function AdminDashboard() {
                                 <th>Título</th>
                                 <th>Solicitante</th>
                                 <th>Cant.</th>
+                                <th>Responsable</th>
                                 <th>Prioridad</th>
                                 <th>Estado</th>
                                 <th>Acciones</th>
@@ -190,14 +282,14 @@ export default function AdminDashboard() {
                                         <button onClick={fetchData} className="btn-primary" style={{ marginTop: '1rem' }}>Reintentar</button>
                                     </td>
                                 </tr>
-                            ) : requests.length === 0 ? (
+                            ) : filteredRequests.length === 0 ? (
                                 <tr>
                                     <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', opacity: 0.5 }}>
-                                        No se encontraron solicitudes pendientes.
+                                        No se encontraron solicitudes que coincidan con el filtro.
                                     </td>
                                 </tr>
                             ) : (
-                                requests.map(req => (
+                                filteredRequests.map(req => (
                                     <tr key={req.id}>
                                         <td style={{ fontWeight: 600, color: 'hsl(var(--primary))' }}>{req.ticket}</td>
                                         <td>{req.titulo}</td>
@@ -210,8 +302,24 @@ export default function AdminDashboard() {
                                         <td>
                                             <span style={{ fontWeight: 500 }}>{req.cantidad} {req.unidad_medida || 'Unid.'}</span>
                                         </td>
+                                        <td style={{ fontSize: '0.85rem' }}>
+                                            {(req.responsable as any)?.nombre || 'Sin asignar'}
+                                        </td>
                                         <td>
-                                            <span className={`badge ${req.prioridad === 'Urgente' ? 'badge-rejected' : 'badge-pending'}`}>
+                                            <span style={{ 
+                                                display: 'inline-flex', 
+                                                alignItems: 'center', 
+                                                gap: '0.4rem', 
+                                                fontSize: '0.7rem',
+                                                padding: '0.2rem 0.6rem',
+                                                borderRadius: '1rem',
+                                                fontWeight: 600,
+                                                background: req.prioridad === 'Urgente' || req.prioridad === 'Alta' ? '#ff4d4d22' : req.prioridad === 'Media' ? '#f59e0b22' : '#10b98122',
+                                                color: req.prioridad === 'Urgente' || req.prioridad === 'Alta' ? '#ff4d4d' : req.prioridad === 'Media' ? '#f59e0b' : '#10b981',
+                                                border: `1px solid ${req.prioridad === 'Urgente' || req.prioridad === 'Alta' ? '#ff4d4d' : req.prioridad === 'Media' ? '#f59e0b' : '#10b981'}`
+                                            }}>
+                                                {req.prioridad === 'Urgente' && <Bell size={12} />}
+                                                {req.prioridad === 'Alta' && <AlertCircle size={12} />}
                                                 {req.prioridad}
                                             </span>
                                         </td>
@@ -233,7 +341,11 @@ export default function AdminDashboard() {
                                         <td>
                                             <button
                                                 className="action-btn"
-                                                onClick={() => setSelectedRequest(req)}
+                                                onClick={() => {
+                                                    setSelectedRequest(req);
+                                                    fetchComments(req.id);
+                                                    setNewComment('');
+                                                }}
                                                 style={{ background: 'hsla(var(--primary), 0.1)', color: 'hsl(var(--primary))' }}
                                             >
                                                 Gestionar
@@ -264,7 +376,12 @@ export default function AdminDashboard() {
                                 <span className="ticket-badge" style={{ display: 'inline-block', marginBottom: '0.5rem' }}>{selectedRequest.ticket}</span>
                                 <h2 style={{ margin: 0 }}>{selectedRequest.titulo}</h2>
                             </div>
-                            <div className={`badge ${selectedRequest.prioridad === 'Urgente' ? 'badge-rejected' : 'badge-pending'}`} style={{ padding: '0.5rem 1rem' }}>
+                            <div className={`badge ${
+                                selectedRequest.prioridad === 'Urgente' || selectedRequest.prioridad === 'Alta' ? 'priority-urgente' : 
+                                selectedRequest.prioridad === 'Media' ? 'priority-media' : 'priority-baja'
+                            }`} style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                {selectedRequest.prioridad === 'Urgente' && <Bell size={16} />}
+                                {selectedRequest.prioridad === 'Alta' && <AlertCircle size={16} />}
                                 {selectedRequest.prioridad}
                             </div>
                         </div>
@@ -338,37 +455,73 @@ export default function AdminDashboard() {
                             </div>
 
                             <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-                                <label>Observaciones para el Solicitante</label>
+                                <label>Historial de Comentarios</label>
+                                <div className="comments-history" style={{ maxHeight: '250px', overflowY: 'auto', background: 'rgba(0,0,0,0.2)', borderRadius: '0.5rem', padding: '1rem', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                    {comments.length === 0 ? (
+                                        <p style={{ textAlign: 'center', opacity: 0.5, fontSize: '0.85rem' }}>No hay comentarios registrados.</p>
+                                    ) : (
+                                        comments.map(c => (
+                                            <div key={c.id} style={{ borderLeft: '3px solid hsla(var(--primary), 0.5)', paddingLeft: '1rem' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '0.25rem' }}>
+                                                    <span style={{ fontWeight: 600, color: 'hsl(var(--primary))' }}>{c.actor?.nombre || 'Sistema'}</span>
+                                                    <span style={{ opacity: 0.5 }}>{new Date(c.created_at).toLocaleString()}</span>
+                                                </div>
+                                                <div style={{ fontSize: '0.85rem', marginBottom: '0.25rem' }}>{c.observacion}</div>
+                                                <span className="badge" style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem', opacity: 0.7 }}>Estado: {c.estado}</span>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+
+                                <label>Nuevo Comentario / Observación</label>
                                 <textarea
                                     className="form-control"
                                     rows={3}
                                     placeholder="Escribe comentarios sobre el avance..."
-                                    value={selectedRequest.observacion_actual || ''}
-                                    onChange={(e) => setSelectedRequest({ ...selectedRequest, observacion_actual: e.target.value })}
+                                    value={newComment}
+                                    onChange={(e) => setNewComment(e.target.value)}
                                 />
                                 <button
                                     className="action-btn"
-                                    style={{ marginTop: '0.5rem', width: '100%' }}
-                                    onClick={() => handleUpdateStatus(selectedRequest.id, selectedRequest.estado_actual, selectedRequest.observacion_actual)}
-                                    disabled={isSaving}
+                                    style={{ 
+                                        marginTop: '1rem', 
+                                        width: 'auto', 
+                                        display: 'block', 
+                                        margin: '1rem auto 0',
+                                        background: 'hsl(var(--primary))',
+                                        color: 'white',
+                                        padding: '0.6rem 2rem',
+                                        borderRadius: '0.5rem',
+                                        fontWeight: 600
+                                    }}
+                                    onClick={() => handleUpdateStatus(selectedRequest.id, selectedRequest.estado_actual, newComment)}
+                                    disabled={isSaving || !newComment.trim()}
                                 >
-                                    {isSaving ? 'Guardando...' : 'Guardar Observación'}
+                                    {isSaving ? 'Guardando...' : 'Insertar Comentario'}
                                 </button>
                             </div>
 
-                            <button
-                                className="btn-primary"
-                                style={{ width: '100%', background: '#10b981', borderColor: '#10b981' }}
-                                onClick={() => handleCloseRequest(selectedRequest.id)}
-                                disabled={isSaving || selectedRequest.estado_actual === 'Revisión'}
-                            >
-                                Finalizar Gestión (Mover a Historial)
-                            </button>
-                            {selectedRequest.estado_actual === 'Revisión' && (
-                                <p style={{ fontSize: '0.7rem', opacity: 0.5, textAlign: 'center', marginTop: '0.5rem' }}>
-                                    El estado debe ser distinto a "Revisión" para finalizar.
-                                </p>
-                            )}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginTop: '1rem' }}>
+                                <button
+                                    className="btn-primary"
+                                    style={{ 
+                                        width: 'auto', 
+                                        background: '#10b981', 
+                                        borderColor: '#10b981',
+                                        fontSize: '0.8rem',
+                                        padding: '0.5rem 1rem'
+                                    }}
+                                    onClick={() => handleCloseRequest(selectedRequest.id)}
+                                    disabled={isSaving || selectedRequest.estado_actual === 'Revisión'}
+                                >
+                                    Finalizar Gestión (Mover a Historial)
+                                </button>
+                                {selectedRequest.estado_actual === 'Revisión' && (
+                                    <p style={{ fontSize: '0.7rem', opacity: 0.5, textAlign: 'right', marginTop: '0.25rem' }}>
+                                        El estado debe ser distinto a "Revisión" para finalizar.
+                                    </p>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>

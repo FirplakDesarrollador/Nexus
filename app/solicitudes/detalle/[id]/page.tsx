@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter, useParams } from 'next/navigation'
-import { ArrowLeft, Package, Clock, MessageSquare, AlertCircle, Building2, Wallet, User, Calendar, Truck, Shield } from 'lucide-react'
+import { ArrowLeft, Package, Clock, MessageSquare, AlertCircle, Building2, Wallet, User, Calendar, Truck, Shield, Bell } from 'lucide-react'
 import Link from 'next/link'
 import '../../estado/status.css'
 
@@ -117,8 +117,14 @@ export default function RequestDetailPage() {
                         <div>
                             <label style={{ display: 'block', fontSize: '0.75rem', opacity: 0.5, textTransform: 'uppercase', marginBottom: '0.25rem' }}>Prioridad</label>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <Shield size={16} style={{ opacity: 0.5 }} />
-                                <span className={request.prioridad === 'Urgente' ? 'text-rejected' : ''}>{request.prioridad}</span>
+                                <span className={`badge ${
+                                    request.prioridad === 'Urgente' || request.prioridad === 'Alta' ? 'priority-urgente' : 
+                                    request.prioridad === 'Media' ? 'priority-media' : 'priority-baja'
+                                }`} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', textTransform: 'capitalize' }}>
+                                    {request.prioridad === 'Urgente' && <Bell size={14} />}
+                                    {request.prioridad === 'Alta' && <AlertCircle size={14} />}
+                                    {request.prioridad}
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -142,7 +148,7 @@ export default function RequestDetailPage() {
                         </div>
 
                         <div>
-                            <label style={{ display: 'block', fontSize: '0.75rem', opacity: 0.5, textTransform: 'uppercase', marginBottom: '0.25rem' }}>Responsable Recepción</label>
+                            <label style={{ display: 'block', fontSize: '0.75rem', opacity: 0.5, textTransform: 'uppercase', marginBottom: '0.25rem' }}>Responsable Compra</label>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                 <User size={16} style={{ opacity: 0.5 }} />
                                 <span>{request.responsable?.nombre || 'General'}</span>
