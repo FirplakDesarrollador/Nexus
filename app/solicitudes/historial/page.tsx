@@ -16,29 +16,29 @@ export default function RequestHistoryPage() {
 
     useEffect(() => {
         const fetchRequests = async () => {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
-
-            let query = supabase.schema('nexus')
+            const { data } = await supabase.schema('nexus')
                 .from('solicitudes')
-                .select('*')
-                .eq('solicitante_id', user.id)
-                .not('closed_at', 'is', null)
-                .order('closed_at', { ascending: false })
+                .select(`
+                    *,
+                    solicitante:solicitante_id(nombre),
+                    responsable:responsable_id(nombre)
+                `)
+                .order('created_at', { ascending: false })
 
-            const { data } = await query
             if (data) setRequests(data)
             setLoading(false)
         }
         fetchRequests()
     }, [supabase])
 
+    const tabs = ['Todos', 'Revisión', 'En Cotización', 'Aprobado', 'En Camino', 'Completada', 'Rechazada']
+
     const filteredRequests = requests.filter(r => {
         const matchesSearch = r.titulo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            r.ticket.toLowerCase().includes(searchTerm.toLowerCase())
-        const matchesTab = tab === 'Todos' ||
-            (tab === 'Completados' && r.estado_actual === 'Completada') ||
-            (tab === 'Rechazados' && r.estado_actual === 'Rechazada')
+            r.ticket.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (r.solicitante?.nombre || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (r.responsable?.nombre || '').toLowerCase().includes(searchTerm.toLowerCase())
+        const matchesTab = tab === 'Todos' || r.estado_actual === tab
         return matchesSearch && matchesTab
     })
 
@@ -51,16 +51,17 @@ export default function RequestHistoryPage() {
             <h1 style={{ marginTop: '2rem', marginBottom: '1rem' }}>Despensa de Historial</h1>
             <p style={{ color: 'hsl(var(--muted-foreground))', marginBottom: '2.5rem' }}>Consulta tus procesos finalizados.</p>
 
-            <div className="tabs" style={{ display: 'flex', gap: '1rem', marginBottom: '2rem' }}>
-                {['Todos', 'Completados', 'Rechazados'].map(t => (
+            <div className="tabs" style={{ display: 'flex', gap: '0.75rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
+                {tabs.map(t => (
                     <button
                         key={t}
                         onClick={() => setTab(t)}
                         className={`btn-primary ${tab === t ? '' : 'glass'}`}
                         style={{
                             background: tab === t ? 'hsl(var(--primary))' : 'transparent',
-                            fontSize: '0.75rem',
-                            padding: '0.5rem 1rem'
+                            fontSize: '0.7rem',
+                            padding: '0.4rem 0.8rem',
+                            minWidth: 'auto'
                         }}
                     >
                         {t}
@@ -84,20 +85,49 @@ export default function RequestHistoryPage() {
             ) : (
                 <div className="request-list-grid">
                     {filteredRequests.map(req => (
-                        <div key={req.id} className="list-card card animate-fade-in" style={{ opacity: 0.8 }}>
+                        <div key={req.id} className="list-card card animate-fade-in" style={{ opacity: 0.9 }}>
                             <div className="ticket-info">
                                 <span className="ticket-id">{req.ticket}</span>
                                 <span className="ticket-title">{req.titulo}</span>
-                                <span className="ticket-qty" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'hsl(var(--primary))' }}>
+                                <div style={{ fontSize: '0.8rem', opacity: 0.6, marginTop: '0.25rem' }}>
+                                    Solicitado por: <strong>{req.solicitante?.nombre}</strong>
+                                </div>
+                                <div style={{ fontSize: '0.8rem', opacity: 0.6, marginTop: '0.15rem' }}>
+                                    Responsable: <strong>{req.responsable?.nombre || 'Sin asignar'}</strong>
+                                </div>
+                                <span className="ticket-qty" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'hsl(var(--primary))', display: 'block', marginTop: '0.5rem' }}>
                                     {req.cantidad} {req.unidad_medida || 'Unid.'}
                                 </span>
-                                <span className="ticket-meta">Cerrada el {new Date(req.closed_at).toLocaleDateString()}</span>
+                                <span className="ticket-meta">
+                                    {req.closed_at ? `Cerrada el ${new Date(req.closed_at).toLocaleDateString()}` : `Creada el ${new Date(req.created_at).toLocaleDateString()}`}
+                                </span>
                             </div>
 
-                            <div className="badge-container">
-                                <span className={`badge ${req.estado_actual === 'Completada' ? 'badge-approved' : 'badge-rejected'}`}>
+                            <div className="badge-container" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
+                                <span className={`badge ${
+                                    req.estado_actual === 'Completada' ? 'badge-approved' : 
+                                    req.estado_actual === 'Rechazada' ? 'badge-rejected' : 'badge-pending'
+                                }`}>
                                     {req.estado_actual}
                                 </span>
+                                {req.prioridad && (
+                                    <span style={{ 
+                                        display: 'inline-flex', 
+                                        alignItems: 'center', 
+                                        gap: '0.3rem', 
+                                        fontSize: '0.65rem',
+                                        padding: '0.15rem 0.5rem',
+                                        borderRadius: '1rem',
+                                        fontWeight: 600,
+                                        background: req.prioridad === 'Urgente' || req.prioridad === 'Alta' ? '#ff4d4d22' : req.prioridad === 'Media' ? '#f59e0b22' : '#10b98122',
+                                        color: req.prioridad === 'Urgente' || req.prioridad === 'Alta' ? '#ff4d4d' : req.prioridad === 'Media' ? '#f59e0b' : '#10b981',
+                                        border: `1px solid ${req.prioridad === 'Urgente' || req.prioridad === 'Alta' ? '#ff4d4d' : req.prioridad === 'Media' ? '#f59e0b' : '#10b981'}`
+                                    }}>
+                                        {req.prioridad === 'Urgente' && <Bell size={10} />}
+                                        {req.prioridad === 'Alta' && <AlertCircle size={10} />}
+                                        {req.prioridad}
+                                    </span>
+                                )}
                             </div>
 
                             {req.motivo_rechazo && req.estado_actual === 'Rechazada' && (
