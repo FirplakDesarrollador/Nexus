@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Search } from 'lucide-react'
+import { ArrowLeft, Search, Bell, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 import '../estado/status.css'
 
