@@ -169,3 +169,22 @@ td {
 .animate-scale-in {
     animation: scaleIn 0.2s ease-out;
 }
+
+/* Clickable Stats */
+.stat-card.clickable {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+}
+
+.stat-card.clickable:hover {
+    transform: translateY(-5px);
+    background: rgba(255, 255, 255, 0.05);
+    border-color: hsla(var(--primary), 0.3);
+}
+
+.stat-card.clickable.active {
+    background: hsla(var(--primary), 0.1);
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 20px -10px hsl(var(--primary));
+}

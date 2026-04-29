@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Send, Package, Truck, Shield, Users, CreditCard, CheckCircle2, X } from 'lucide-react'
+import { ArrowLeft, Send, Package, Truck, Shield, Users, CreditCard, CheckCircle2, X, Search, ChevronDown, Bell, AlertTriangle, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 import './request.css'
 
@@ -16,13 +16,131 @@ const SuccessModal = ({ ticket, onClose }: { ticket: string, onClose: () => void
             <h2>¡Solicitud Enviada!</h2>
             <p>Tu requerimiento ha sido creado con éxito bajo el ticket:</p>
             <div className="ticket-badge">{ticket}</div>
-            <p className="modal-footer-text">Nallely recibirá una notificación para iniciar la revisión.</p>
-            <button onClick={onClose} className="btn-primary" style={{ width: '100%', marginTop: '1rem' }}>
+            <p className="modal-footer-text">Se enviará una notificación al responsable para iniciar la revisión.</p>
+            <button type="button" onClick={onClose} className="btn-primary" style={{ width: '100%', marginTop: '1rem' }}>
                 Entendido
             </button>
         </div>
     </div>
 )
+
+const SearchableSelect = ({ 
+    options, 
+    value, 
+    onChange, 
+    placeholder,
+    label
+}: { 
+    options: { id: string, label: string }[], 
+    value: string, 
+    onChange: (val: string) => void, 
+    placeholder: string,
+    label: string
+}) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    const selectedOption = options.find(o => o.id === value);
+
+    const filteredOptions = options.filter(o => 
+        o.label.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    return (
+        <div className="form-group">
+            <label>{label}</label>
+            <div className="searchable-select" ref={containerRef}>
+                <div className={`select-trigger ${isOpen ? 'active' : ''}`} onClick={() => setIsOpen(!isOpen)}>
+                    {selectedOption ? (
+                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {selectedOption.label}
+                        </span>
+                    ) : (
+                        <span className="placeholder">{placeholder}</span>
+                    )}
+                    <ChevronDown size={16} className={`arrow ${isOpen ? 'open' : ''}`} />
+                </div>
+                
+                {isOpen && (
+                    <div className="select-dropdown glass animate-fade-in">
+                        <div className="search-box">
+                            <Search size={14} />
+                            <input 
+                                type="text" 
+                                className="search-input" 
+                                placeholder="Buscar..." 
+                                autoFocus
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                            />
+                        </div>
+                        <div className="options-list">
+                            {filteredOptions.length > 0 ? (
+                                filteredOptions.map(opt => (
+                                    <div 
+                                        key={opt.id} 
+                                        className={`option-item ${opt.id === value ? 'selected' : ''}`}
+                                        onClick={() => {
+                                            onChange(opt.id);
+                                            setIsOpen(false);
+                                            setSearchTerm('');
+                                        }}
+                                    >
+                                        {opt.label}
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="no-results">No se encontraron resultados</div>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+const PriorityBadge = ({ priority, size = 16 }: { priority: string, size?: number }) => {
+    const getPriorityData = (p: string) => {
+        switch (p) {
+            case 'Urgente': return { style: { background: '#ff4d4d22', color: '#ff4d4d', border: '1px solid #ff4d4d' }, icon: <Bell size={size} /> };
+            case 'Alta': return { style: { background: '#ff4d4d22', color: '#ff4d4d', border: '1px solid #ff4d4d' }, icon: <AlertCircle size={size} /> };
+            case 'Media': return { style: { background: '#f59e0b22', color: '#f59e0b', border: '1px solid #f59e0b' }, icon: null };
+            case 'Baja': return { style: { background: '#10b98122', color: '#10b981', border: '1px solid #10b981' }, icon: null };
+            default: return { style: {}, icon: null };
+        }
+    };
+
+    const data = getPriorityData(priority);
+    return (
+        <span className="badge" style={{ 
+            display: 'inline-flex', 
+            alignItems: 'center', 
+            gap: '0.4rem', 
+            textTransform: 'capitalize',
+            padding: '0.25rem 0.75rem',
+            borderRadius: '2rem',
+            fontSize: '0.75rem',
+            fontWeight: 600,
+            ...data.style 
+        }}>
+            {data.icon}
+            {priority}
+        </span>
+    );
+};
 
 export default function NewRequestPage() {
     const supabase = createClient()
@@ -37,7 +155,7 @@ export default function NewRequestPage() {
     const [form, setForm] = useState({
         title: '',
         purpose: '',
-        quantity: 1,
+        quantity: '' as any,
         unit: 'Unidades',
         suggested_supplier: '',
         exclusivity: 'NA',
@@ -69,7 +187,7 @@ export default function NewRequestPage() {
         fetchData()
     }, [supabase])
 
-    const isValid = form.priority && form.cost_center_id && form.account_id && form.title && form.quantity > 0
+    const isValid = form.priority && form.cost_center_id && form.account_id && form.title && form.quantity && Number(form.quantity) > 0
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -88,7 +206,7 @@ export default function NewRequestPage() {
                 solicitante_id: user.id,
                 titulo: form.title,
                 proposito: form.purpose,
-                cantidad: form.quantity,
+                cantidad: parseInt(form.quantity.toString() || '0'),
                 proveedor_sugerido: form.suggested_supplier,
                 exclusividad: form.exclusivity,
                 prioridad: form.priority,
@@ -160,9 +278,9 @@ export default function NewRequestPage() {
                                         style={{ flex: 1 }}
                                         min="1"
                                         value={form.quantity}
-                                        onChange={e => {
+                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                                             const val = e.target.value;
-                                            setForm({ ...form, quantity: val === '' ? 0 : parseInt(val) })
+                                            setForm({ ...form, quantity: val as any })
                                         }}
                                         required
                                     />
@@ -198,7 +316,7 @@ export default function NewRequestPage() {
                                 <label>¿Es Proveedor Exclusivo?</label>
                                 <select
                                     className="form-control"
-                                    value={form.exclusivity} onChange={e => setForm({ ...form, exclusivity: e.target.value })}
+                                    value={form.exclusivity} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({ ...form, exclusivity: e.target.value })}
                                 >
                                     <option value="NO">NO</option>
                                     <option value="SI">SI</option>
@@ -214,23 +332,46 @@ export default function NewRequestPage() {
                         <div className="form-grid">
                             <div className="form-group">
                                 <label>Prioridad *</label>
-                                <select
-                                    className="form-control"
-                                    value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })}
-                                    required
-                                >
-                                    <option value="">Seleccione...</option>
-                                    <option value="Urgente">Urgente</option>
-                                    <option value="Alta">Alta</option>
-                                    <option value="Media">Media</option>
-                                    <option value="Baja">Baja</option>
-                                </select>
+                                <div className="priority-selector" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
+                                    {['Urgente', 'Alta', 'Media', 'Baja'].map(p => {
+                                        const isSelected = form.priority === p;
+                                        const color = p === 'Urgente' || p === 'Alta' ? '#ff4d4d' : p === 'Media' ? '#f59e0b' : '#10b981';
+                                        return (
+                                            <button
+                                                key={p}
+                                                type="button"
+                                                className={`priority-btn ${isSelected ? 'active' : ''} ${p.toLowerCase()}`}
+                                                onClick={() => setForm({ ...form, priority: p })}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: '0.5rem',
+                                                    padding: '0.75rem',
+                                                    borderRadius: '0.5rem',
+                                                    border: `1px solid ${isSelected ? color : 'var(--glass-border)'}`,
+                                                    background: isSelected ? `${color}22` : 'rgba(255,255,255,0.05)',
+                                                    color: isSelected ? color : 'rgba(255,255,255,0.5)',
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.2s',
+                                                    fontSize: '0.85rem',
+                                                    fontWeight: isSelected ? 600 : 400,
+                                                    boxShadow: isSelected ? `0 0 15px -5px ${color}55` : 'none'
+                                                }}
+                                            >
+                                                {p === 'Urgente' && <Bell size={14} />}
+                                                {p === 'Alta' && <AlertCircle size={14} />}
+                                                {p}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
                             </div>
                             <div className="form-group">
                                 <label>Tipo de Operación</label>
                                 <select
                                     className="form-control"
-                                    value={form.operation_type} onChange={e => setForm({ ...form, operation_type: e.target.value })}
+                                    value={form.operation_type} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({ ...form, operation_type: e.target.value })}
                                 >
                                     <option value="PTS">PTS</option>
                                     <option value="PTO">PTO</option>
@@ -244,21 +385,20 @@ export default function NewRequestPage() {
                     <section className="block">
                         <h3 className="block-title"><Users size={18} /> Responsable y Entrega</h3>
                         <div className="form-grid">
-                            <div className="form-group">
-                                <label>Responsable de Recepción</label>
-                                <select
-                                    className="form-control"
-                                    value={form.responsable_id} onChange={e => setForm({ ...form, responsable_id: e.target.value })}
-                                >
-                                    <option value="">Seleccione un usuario...</option>
-                                    {users.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-                                </select>
-                            </div>
+                            <SearchableSelect
+                                label="Responsable de Compra"
+                                options={users
+                                    .filter(u => ['Nallely Lopera', 'Alejandro Fernandez'].includes(u.nombre))
+                                    .map(u => ({ id: u.id, label: u.nombre }))}
+                                value={form.responsable_id}
+                                onChange={val => setForm({ ...form, responsable_id: val })}
+                                placeholder="Seleccione responsable..."
+                            />
                             <div className="form-group">
                                 <label>Fecha de Entrega Requerida</label>
                                 <input
                                     type="date" className="form-control"
-                                    value={form.delivery_date} onChange={e => setForm({ ...form, delivery_date: e.target.value })}
+                                    value={form.delivery_date} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, delivery_date: e.target.value })}
                                 />
                             </div>
                         </div>
@@ -268,39 +408,31 @@ export default function NewRequestPage() {
                     <section className="block">
                         <h3 className="block-title"><CreditCard size={18} /> Presupuesto y Contabilidad</h3>
                         <div className="form-grid">
-                            <div className="form-group">
-                                <label>Centro de Costos *</label>
-                                <select
-                                    className="form-control"
-                                    value={form.cost_center_id} onChange={e => setForm({ ...form, cost_center_id: e.target.value })}
-                                    required
-                                >
-                                    <option value="">Seleccione...</option>
-                                    {costCenters.map(c => (
-                                        <option key={c.id} value={c.id}>
-                                            [{c.codigo}] {c.nombre}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="form-group">
-                                <label>Cuenta Contable *</label>
-                                <select
-                                    className="form-control"
-                                    value={form.account_id} onChange={e => setForm({ ...form, account_id: e.target.value })}
-                                    required
-                                >
-                                    <option value="">Seleccione...</option>
-                                    {accounts.map(a => <option key={a.id} value={a.id}>{a.codigo} - {a.nombre}</option>)}
-                                </select>
-                            </div>
+                            <SearchableSelect
+                                label="Centro de Costos *"
+                                options={costCenters.map(c => ({ id: c.id, label: `[${c.codigo}] ${c.nombre}` }))}
+                                value={form.cost_center_id}
+                                onChange={val => setForm({ ...form, cost_center_id: val })}
+                                placeholder="Seleccione centro de costos..."
+                            />
+                            <SearchableSelect
+                                label="Cuenta Contable *"
+                                options={accounts.map(a => ({ id: a.id, label: `${a.codigo} - ${a.nombre}` }))}
+                                value={form.account_id}
+                                onChange={val => setForm({ ...form, account_id: val })}
+                                placeholder="Seleccione cuenta contable..."
+                            />
                         </div>
                         <div className="form-group" style={{ marginTop: '1.5rem' }}>
                             <label>Presupuesto Estimado (Opcional)</label>
                             <input
                                 type="number" className="form-control" placeholder="0.00"
-                                value={form.estimated_budget} onChange={e => setForm({ ...form, estimated_budget: e.target.value })}
+                                step="0.01"
+                                value={form.estimated_budget} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, estimated_budget: e.target.value })}
                             />
+                            <small style={{ color: '#888', fontSize: '0.8rem', marginTop: '4px', display: 'block' }}>
+                                * Ingresa el valor sin puntos ni comas para los miles (ej: 600000). Si usas decimales, sepáralos con punto (.).
+                            </small>
                         </div>
                     </section>
 

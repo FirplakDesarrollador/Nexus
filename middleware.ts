@@ -57,14 +57,16 @@ export async function middleware(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
 
     // Protected routes logic
-    const isAuthPage = request.nextUrl.pathname.startsWith('/login')
-    const isProtectedPage = request.nextUrl.pathname !== '/' && !isAuthPage
+    // Public routes that don't require authentication
+    const publicPages = ['/login', '/forgot-password', '/reset-password', '/auth/callback']
+    const isPublicPage = publicPages.some(page => request.nextUrl.pathname.startsWith(page)) || request.nextUrl.pathname === '/'
+    const isProtectedPage = !isPublicPage
 
     if (!user && isProtectedPage) {
         return NextResponse.redirect(new URL('/login', request.url))
     }
 
-    if (user && isAuthPage) {
+    if (user && (request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/forgot-password')) {
         return NextResponse.redirect(new URL('/home', request.url))
     }
 
