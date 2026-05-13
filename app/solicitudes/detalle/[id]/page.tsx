@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter, useParams } from 'next/navigation'
-import { ArrowLeft, Package, Clock, MessageSquare, AlertCircle, Building2, Wallet, User, Calendar, Truck, Shield, Bell } from 'lucide-react'
+import { ArrowLeft, Package, Clock, MessageSquare, AlertCircle, Building2, Wallet, User, Calendar, Truck, Shield, Bell, Paperclip, Download, FileText, Image as ImageIcon } from 'lucide-react'
 import Link from 'next/link'
 import '../../estado/status.css'
 
@@ -12,6 +12,7 @@ export default function RequestDetailPage() {
     const supabase = createClient()
     const router = useRouter()
     const [request, setRequest] = useState<any>(null)
+    const [attachedFiles, setAttachedFiles] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
 
@@ -38,8 +39,38 @@ export default function RequestDetailPage() {
                 setLoading(false)
             }
         }
-        if (id) fetchRequest()
+        const fetchDocuments = async (requestId: string) => {
+            const { data } = await supabase.schema('nexus')
+                .from('documentos')
+                .select('*')
+                .eq('solicitud_id', requestId)
+                .order('created_at', { ascending: false })
+            if (data) setAttachedFiles(data)
+        }
+
+        if (id) {
+            fetchRequest()
+            fetchDocuments(id as string)
+        }
     }, [id, supabase])
+
+    const handleDownloadFile = async (path: string, filename: string) => {
+        try {
+            const { data, error } = await supabase.storage
+                .from('solicitudes_documentos')
+                .download(path)
+            
+            if (error) throw error
+            
+            const url = URL.createObjectURL(data)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = filename
+            a.click()
+        } catch (err: any) {
+            alert('Error al descargar: ' + err.message)
+        }
+    }
 
     if (loading) return (
         <div className="list-container">
@@ -172,6 +203,31 @@ export default function RequestDetailPage() {
                         </div>
                     </div>
                 </div>
+
+                {/* Archivos Adjuntos */}
+                {attachedFiles.length > 0 && (
+                    <div className="card glass" style={{ gridColumn: 'span 2', padding: '2rem' }}>
+                        <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Paperclip size={18} /> Documentos y Cotizaciones
+                        </h3>
+                        <div className="files-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
+                            {attachedFiles.map(file => (
+                                <div key={file.id} className="file-card glass" style={{ padding: '0.75rem', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'rgba(255,255,255,0.02)' }}>
+                                    <div style={{ background: 'rgba(255,255,255,0.05)', padding: '0.5rem', borderRadius: '0.4rem' }}>
+                                        {file.filename.match(/\.(jpg|jpeg|png|gif)$/i) ? <ImageIcon size={18} /> : <FileText size={18} />}
+                                    </div>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.filename}</div>
+                                        <div style={{ fontSize: '0.65rem', opacity: 0.5 }}>{new Date(file.created_at).toLocaleDateString()}</div>
+                                    </div>
+                                    <button onClick={() => handleDownloadFile(file.path, file.filename)} style={{ padding: '0.25rem', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.7, color: 'white' }} title="Descargar">
+                                        <Download size={16} />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {/* Observaciones de Nallely */}
                 <div className="card glass" style={{ gridColumn: 'span 2', padding: '2rem' }}>
