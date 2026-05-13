@@ -31,7 +31,7 @@ export default function RequestHistoryPage() {
         fetchRequests()
     }, [supabase])
 
-    const tabs = ['Todos', 'Revisión', 'En Cotización', 'Aprobado', 'En Camino', 'Completada', 'Rechazada']
+    const tabs = ['Todos', 'Revisión', 'Aprobado', 'En Cotización', 'En Camino', 'Completada', 'Rechazada']
 
     const filteredRequests = requests.filter(r => {
         const matchesSearch = r.titulo.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -48,7 +48,7 @@ export default function RequestHistoryPage() {
                 <ArrowLeft size={16} /> Volver al Inicio
             </Link>
 
-            <h1 style={{ marginTop: '2rem', marginBottom: '1rem' }}>Despensa de Historial</h1>
+            <h1 style={{ marginTop: '2rem', marginBottom: '1rem' }}>Historial de compras</h1>
             <p style={{ color: 'hsl(var(--muted-foreground))', marginBottom: '2.5rem' }}>Consulta tus procesos finalizados.</p>
 
             <div className="tabs" style={{ display: 'flex', gap: '0.75rem', marginBottom: '2rem', flexWrap: 'wrap' }}>

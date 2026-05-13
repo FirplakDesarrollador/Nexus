@@ -156,6 +156,14 @@ export default function RequestDetailPage() {
                         </div>
 
                         <div>
+                            <label style={{ display: 'block', fontSize: '0.75rem', opacity: 0.5, textTransform: 'uppercase', marginBottom: '0.25rem' }}>Responsable de Aprobar</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <Shield size={16} style={{ opacity: 0.5 }} />
+                                <span>{request.aprobador_email || 'No asignado'}</span>
+                            </div>
+                        </div>
+
+                        <div>
                             <label style={{ display: 'block', fontSize: '0.75rem', opacity: 0.5, textTransform: 'uppercase', marginBottom: '0.25rem' }}>Fecha Requerida</label>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                 <Calendar size={16} style={{ opacity: 0.5 }} />

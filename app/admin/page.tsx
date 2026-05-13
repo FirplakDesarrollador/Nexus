@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation'
 import { 
     Search, Filter, Calendar, User as UserIcon, Building2, Package, 
     CreditCard, CheckCircle2, X, Eye, CheckCircle, XCircle, 
-    Truck, Wallet, Bell, AlertCircle, Clock, AlertTriangle, FileText
+    Truck, Wallet, Bell, AlertCircle, Clock, AlertTriangle, FileText,
+    Paperclip, Trash2, Download, Image as ImageIcon
 } from 'lucide-react'
 import './admin.css'
 
@@ -22,6 +23,8 @@ export default function AdminDashboard() {
     const [searchTerm, setSearchTerm] = useState('')
     const [comments, setComments] = useState<any[]>([])
     const [newComment, setNewComment] = useState('')
+    const [attachedFiles, setAttachedFiles] = useState<any[]>([])
+    const [isUploading, setIsUploading] = useState(false)
 
     const router = useRouter()
 
@@ -82,6 +85,94 @@ export default function AdminDashboard() {
             .eq('solicitud_id', requestId)
             .order('created_at', { ascending: false })
         if (data) setComments(data)
+    }
+
+    const fetchDocuments = async (requestId: string) => {
+        const { data } = await supabase.schema('nexus')
+            .from('documentos')
+            .select('*')
+            .eq('solicitud_id', requestId)
+            .order('created_at', { ascending: false })
+        if (data) setAttachedFiles(data)
+    }
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file || !selectedRequest) return
+
+        setIsUploading(true)
+        try {
+            const fileExt = file.name.split('.').pop()
+            const fileName = `${selectedRequest.ticket}_${Math.random().toString(36).substring(7)}.${fileExt}`
+            const filePath = `solicitudes/${selectedRequest.id}/${fileName}`
+
+            // 1. Upload to Storage
+            const { error: uploadError } = await supabase.storage
+                .from('solicitudes_documentos')
+                .upload(filePath, file)
+
+            if (uploadError) throw uploadError
+
+            // 2. Insert into Database
+            const { error: dbError } = await supabase.schema('nexus')
+                .from('documentos')
+                .insert({
+                    solicitud_id: selectedRequest.id,
+                    filename: file.name,
+                    path: filePath
+                })
+
+            if (dbError) throw dbError
+
+            // 3. Refresh
+            await fetchDocuments(selectedRequest.id)
+            alert('Archivo adjuntado correctamente.')
+        } catch (err: any) {
+            console.error('Error uploading file:', err)
+            alert('Error al subir archivo: ' + err.message)
+        } finally {
+            setIsUploading(false)
+        }
+    }
+
+    const handleDownloadFile = async (path: string, filename: string) => {
+        try {
+            const { data, error } = await supabase.storage
+                .from('solicitudes_documentos')
+                .download(path)
+            
+            if (error) throw error
+            
+            const url = URL.createObjectURL(data)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = filename
+            a.click()
+        } catch (err: any) {
+            alert('Error al descargar: ' + err.message)
+        }
+    }
+
+    const handleDeleteFile = async (id: string, path: string) => {
+        if (!confirm('¿Eliminar este archivo?')) return
+        
+        try {
+            // 1. Delete from Storage
+            await supabase.storage.from('solicitudes_documentos').remove([path])
+            
+            // 2. Delete from DB
+            const { error } = await supabase.schema('nexus')
+                .from('documentos')
+                .delete()
+                .eq('id', id)
+            
+            if (error) throw error
+            
+            // 3. Refresh
+            if (selectedRequest) await fetchDocuments(selectedRequest.id)
+        } catch (err: any) {
+            alert('Error al eliminar: ' + err.message)
+        }
     }
 
     const handleUpdateStatus = async (id: string, newStatus: string, observation?: string) => {
@@ -331,8 +422,8 @@ export default function AdminDashboard() {
                                                 onChange={(e) => handleUpdateStatus(req.id, e.target.value)}
                                             >
                                                 <option value="Revisión">Revisión</option>
-                                                <option value="En Cotización">En Cotización</option>
                                                 <option value="Aprobado">Aprobado</option>
+                                                <option value="En Cotización">En Cotización</option>
                                                 <option value="En Camino">En Camino</option>
                                                 <option value="Completada">Completada</option>
                                                 <option value="Rechazada">Rechazada</option>
@@ -344,6 +435,7 @@ export default function AdminDashboard() {
                                                 onClick={() => {
                                                     setSelectedRequest(req);
                                                     fetchComments(req.id);
+                                                    fetchDocuments(req.id);
                                                     setNewComment('');
                                                 }}
                                                 style={{ background: 'hsla(var(--primary), 0.1)', color: 'hsl(var(--primary))' }}
@@ -362,7 +454,17 @@ export default function AdminDashboard() {
             {/* Modal de Gestión */}
             {selectedRequest && (
                 <div className="modal-overlay animate-fade-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 1000, padding: '2rem' }}>
-                    <div className="modal-content glass animate-scale-in" style={{ width: '100%', maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto', position: 'relative', padding: '2.5rem' }}>
+                    <div className="modal-content glass animate-scale-in" style={{ 
+                        width: 'min(1000px, 98%)', 
+                        maxHeight: '92vh', 
+                        overflowY: 'auto', 
+                        overflowX: 'hidden',
+                        position: 'relative', 
+                        padding: '2.5rem 2.5rem 5rem 2.5rem',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+                        boxSizing: 'border-box'
+                    }}>
                         <button
                             className="close-btn"
                             onClick={() => setSelectedRequest(null)}
@@ -434,7 +536,15 @@ export default function AdminDashboard() {
                             </div>
                         </div>
 
-                        <div className="management-actions glass" style={{ padding: '1.5rem', border: '1px solid var(--glass-border)', borderRadius: '1rem' }}>
+                        <div className="management-actions glass" style={{ 
+                            marginTop: '3rem', 
+                            padding: '2rem', 
+                            border: '1px solid hsla(var(--primary), 0.2)', 
+                            borderRadius: '1.5rem', 
+                            background: 'rgba(255,255,255,0.015)',
+                            boxShadow: 'inset 0 0 20px rgba(0,0,0,0.2)',
+                            boxSizing: 'border-box'
+                        }}>
                             <h3 style={{ marginTop: 0, marginBottom: '1.5rem', fontSize: '1rem' }}>Acciones de Gestión</h3>
 
                             <div className="form-group" style={{ marginBottom: '1.5rem' }}>
@@ -446,8 +556,8 @@ export default function AdminDashboard() {
                                     disabled={isSaving}
                                 >
                                     <option value="Revisión">Revisión</option>
-                                    <option value="En Cotización">En Cotización</option>
                                     <option value="Aprobado">Aprobado</option>
+                                    <option value="En Cotización">En Cotización</option>
                                     <option value="En Camino">En Camino</option>
                                     <option value="Completada">Completada</option>
                                     <option value="Rechazada">Rechazada</option>
@@ -471,6 +581,45 @@ export default function AdminDashboard() {
                                             </div>
                                         ))
                                     )}
+                                </div>
+
+                                <div className="attachments-section" style={{ marginBottom: '2rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                        <label style={{ margin: 0 }}>Archivos y Cotizaciones</label>
+                                        <label className="action-btn" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0, fontSize: '0.8rem' }}>
+                                            <Paperclip size={14} />
+                                            {isUploading ? 'Subiendo...' : 'Adjuntar Archivo'}
+                                            <input type="file" style={{ display: 'none' }} onChange={handleFileUpload} disabled={isUploading} />
+                                        </label>
+                                    </div>
+                                    
+                                    <div className="files-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
+                                        {attachedFiles.length === 0 ? (
+                                            <p style={{ gridColumn: '1/-1', textAlign: 'center', opacity: 0.5, fontSize: '0.8rem', padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '0.5rem', border: '1px dashed rgba(255,255,255,0.1)' }}>
+                                                No hay archivos adjuntos.
+                                            </p>
+                                        ) : (
+                                            attachedFiles.map(file => (
+                                                <div key={file.id} className="file-card glass" style={{ padding: '0.75rem', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                                    <div style={{ background: 'rgba(255,255,255,0.05)', padding: '0.5rem', borderRadius: '0.4rem' }}>
+                                                        {file.filename.match(/\.(jpg|jpeg|png|gif)$/i) ? <ImageIcon size={18} /> : <FileText size={18} />}
+                                                    </div>
+                                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                                        <div style={{ fontSize: '0.75rem', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.filename}</div>
+                                                        <div style={{ fontSize: '0.65rem', opacity: 0.5 }}>{new Date(file.created_at).toLocaleDateString()}</div>
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '0.25rem' }}>
+                                                        <button onClick={() => handleDownloadFile(file.path, file.filename)} style={{ padding: '0.25rem', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.7 }} title="Descargar">
+                                                            <Download size={14} />
+                                                        </button>
+                                                        <button onClick={() => handleDeleteFile(file.id, file.path)} style={{ padding: '0.25rem', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.7, color: '#ff4d4d' }} title="Eliminar">
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
                                 </div>
 
                                 <label>Nuevo Comentario / Observación</label>

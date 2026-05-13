@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { createClient } from '@/lib/supabase'
+import { createClient, createTHClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Send, Package, Truck, Shield, Users, CreditCard, CheckCircle2, X, Search, ChevronDown, Bell, AlertTriangle, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
@@ -44,7 +44,7 @@ const SearchableSelect = ({
     const selectedOption = options.find(o => o.id === value);
 
     const filteredOptions = options.filter(o => 
-        o.label.toLowerCase().includes(searchTerm.toLowerCase())
+        (o.label || '').toLowerCase().includes((searchTerm || '').toLowerCase())
     );
 
     useEffect(() => {
@@ -145,10 +145,11 @@ const PriorityBadge = ({ priority, size = 16 }: { priority: string, size?: numbe
 export default function NewRequestPage() {
     const supabase = createClient()
     const router = useRouter()
-    const [loading, setLoading] = useState(false)
     const [users, setUsers] = useState<any[]>([])
     const [costCenters, setCostCenters] = useState<any[]>([])
     const [accounts, setAccounts] = useState<any[]>([])
+    const [thEmployees, setThEmployees] = useState<any[]>([])
+    const [loading, setLoading] = useState(true)
     const [showSuccess, setShowSuccess] = useState(false)
     const [lastTicket, setLastTicket] = useState('')
 
@@ -165,29 +166,58 @@ export default function NewRequestPage() {
         delivery_date: '',
         cost_center_id: '',
         account_id: '',
-        estimated_budget: ''
+        estimated_budget: '',
+        approver_email: ''
     })
 
     useEffect(() => {
         const fetchData = async () => {
-            const { data: usersData } = await supabase.schema('nexus').from('users').select('id, nombre, email')
-            const { data: ccData } = await supabase.schema('nexus')
-                .from('centros_costos')
-                .select('id, nombre, codigo, grupo')
-                .eq('activo', true)
-                .order('grupo', { ascending: true })
-                .order('nombre', { ascending: true })
+            try {
+                const { data: usersData } = await supabase.schema('nexus').from('users').select('id, nombre, email')
+                const { data: ccData } = await supabase.schema('nexus')
+                    .from('centros_costos')
+                    .select('id, nombre, codigo, grupo')
+                    .eq('activo', true)
+                    .order('grupo', { ascending: true })
+                    .order('nombre', { ascending: true })
 
-            const { data: accData } = await supabase.schema('nexus').from('cuentas_contables').select('id, nombre, codigo').eq('activo', true)
+                const { data: accData } = await supabase.schema('nexus').from('cuentas_contables').select('id, nombre, codigo').eq('activo', true)
+                
+                // Conexión con proyecto TH y TI
+                const thClient = createTHClient()
+                const { data: thData, error: thError } = await thClient
+                    .from('empleados')
+                    .select('nombreCompleto, correo_electronico')
+                    .eq('activo', true)
+                    .order('nombreCompleto')
 
-            if (usersData) setUsers(usersData)
-            if (ccData) setCostCenters(ccData)
-            if (accData) setAccounts(accData)
+                if (thError) {
+                    console.error("Error obteniendo empleados de TH:", thError.message || thError)
+                    console.error("Detalles del error TH:", JSON.stringify(thError, null, 2))
+                }
+
+                if (!process.env.NEXT_PUBLIC_TH_URL || !process.env.NEXT_PUBLIC_TH_ANON_KEY) {
+                    console.warn("Advertencia: Las credenciales de TH y TI no están configuradas en el .env o el servidor necesita reinicio.")
+                }
+
+                setCostCenters(ccData || [])
+                setUsers(usersData || [])
+                setAccounts(accData || [])
+                setThEmployees(thData || [])
+                
+                if (thData && thData.length > 0) {
+                    console.log(`${thData.length} empleados cargados de TH correctamente.`)
+                }
+            } catch (err) {
+                console.error("Error loading data", err)
+            } finally {
+                setLoading(false)
+            }
         }
         fetchData()
     }, [supabase])
 
-    const isValid = form.priority && form.cost_center_id && form.account_id && form.title && form.quantity && Number(form.quantity) > 0
+    const isValid = form.priority && form.cost_center_id && form.account_id && form.title && form.quantity && Number(form.quantity) > 0 && form.approver_email
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -217,7 +247,8 @@ export default function NewRequestPage() {
                 cuenta_contable_id: form.account_id,
                 presupuesto_estimado: form.estimated_budget ? parseFloat(form.estimated_budget) : null,
                 unidad_medida: form.unit,
-                estado_actual: 'Revisión'
+                estado_actual: 'Revisión',
+                aprobador_email: form.approver_email || null
             })
 
             if (error) throw error
@@ -381,7 +412,28 @@ export default function NewRequestPage() {
                         </div>
                     </section>
 
-                    {/* Bloque 4 */}
+                    {/* Bloque 4: Aprobación */}
+                    <section className="block">
+                        <h3 className="block-title"><CheckCircle2 size={18} /> Aprobación</h3>
+                        <div className="form-grid single">
+                            <SearchableSelect
+                                label="Responsable de Aprobar *"
+                                options={
+                                    Array.from(new Map(
+                                        thEmployees
+                                            .filter(e => e.correo_electronico && e.nombreCompleto)
+                                            .map(e => [e.correo_electronico, e])
+                                    ).values())
+                                    .map(e => ({ id: e.correo_electronico, label: e.nombreCompleto }))
+                                }
+                                value={form.approver_email}
+                                onChange={val => setForm({ ...form, approver_email: val })}
+                                placeholder="Seleccione quién debe aprobar..."
+                            />
+                        </div>
+                    </section>
+
+                    {/* Bloque 5 */}
                     <section className="block">
                         <h3 className="block-title"><Users size={18} /> Responsable y Entrega</h3>
                         <div className="form-grid">
@@ -404,7 +456,7 @@ export default function NewRequestPage() {
                         </div>
                     </section>
 
-                    {/* Bloque 5 */}
+                    {/* Bloque 6 */}
                     <section className="block">
                         <h3 className="block-title"><CreditCard size={18} /> Presupuesto y Contabilidad</h3>
                         <div className="form-grid">
