@@ -16,7 +16,7 @@ export default function RootLayout({
       <body>
         <div className="mesh-bg mesh-1"></div>
         <div className="mesh-bg mesh-2"></div>
-        <main className="animate-fade-in">
+        <main>
           {children}
         </main>
       </body>

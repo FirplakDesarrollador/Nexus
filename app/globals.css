@@ -1,30 +1,46 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
 
+/* ============================================================
+   NEXUS BRAND COLOR PALETTE — LIGHT MODE
+   Dark Petrol Blue: #254153  → hsl(204, 38%, 24%)
+   Teal/Steel Blue:  #749094  → hsl(188, 13%, 52%)
+   Near Black:       #1d1d1b  → hsl(60,  1%,  11%)
+   Light Cream:      #f5f1ea  → hsl(38,  35%, 94%)
+   ============================================================ */
+
 :root {
-  --background: 240 10% 3.9%;
-  --foreground: 0 0% 98%;
-  --card: 240 10% 6%;
-  --card-foreground: 0 0% 98%;
-  --popover: 240 10% 4.5%;
-  --popover-foreground: 0 0% 98%;
-  --primary: 263.4 70% 50.4%;
-  --primary-foreground: 210 40% 98%;
-  --secondary: 217.2 32.6% 17.5%;
-  --secondary-foreground: 210 40% 98%;
-  --muted: 240 3.7% 15.9%;
-  --muted-foreground: 240 5% 64.9%;
-  --accent: 217.2 32.6% 17.5%;
-  --accent-foreground: 210 40% 98%;
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 240 3.7% 15.9%;
-  --input: 240 3.7% 15.9%;
-  --ring: 263.4 70% 50.4%;
+  /* Backgrounds - light cream mode */
+  --background: 38 35% 94%;
+  --foreground: 60 1% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 60 1% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 60 1% 11%;
+
+  /* Brand colors — petrol as primary on light */
+  --primary: 204 38% 24%;           /* Dark Petrol #254153 */
+  --primary-foreground: 38 35% 94%; /* Cream */
+  --secondary: 188 13% 52%;         /* Teal #749094 */
+  --secondary-foreground: 0 0% 100%;
+
+  /* Supporting */
+  --muted: 38 20% 88%;
+  --muted-foreground: 204 15% 42%;
+  --accent: 188 12% 90%;
+  --accent-foreground: 204 38% 24%;
+
+  /* Semantic */
+  --destructive: 0 72% 45%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 204 15% 82%;
+  --input: 204 15% 86%;
+  --ring: 204 38% 24%;
   --radius: 1rem;
 
-  --glass: rgba(255, 255, 255, 0.03);
-  --glass-border: rgba(255, 255, 255, 0.1);
-  --glass-blur: 12px;
+  /* Glass effects - light mode */
+  --glass: rgba(255, 255, 255, 0.65);
+  --glass-border: rgba(37, 65, 83, 0.12);
+  --glass-blur: 14px;
 }
 
 * {
@@ -39,8 +55,9 @@ body {
   font-family: 'Outfit', sans-serif;
   min-height: 100vh;
   overflow-x: hidden;
-  background-image: radial-gradient(at 0% 0%, hsla(263, 70%, 50%, 0.15) 0, transparent 50%),
-    radial-gradient(at 100% 100%, hsla(217, 32%, 17%, 0.2) 0, transparent 50%);
+  background-image:
+    radial-gradient(at 5% 10%, hsla(204, 38%, 24%, 0.07) 0, transparent 55%),
+    radial-gradient(at 95% 90%, hsla(188, 13%, 52%, 0.09) 0, transparent 55%);
 }
 
 .glass {
@@ -57,31 +74,34 @@ body {
   border-radius: var(--radius);
   padding: 2rem;
   transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+  box-shadow: 0 2px 8px rgba(37, 65, 83, 0.06);
 }
 
 .card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
-  border-color: hsla(var(--primary), 0.5);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px -8px rgba(37, 65, 83, 0.15);
+  border-color: rgba(116, 144, 148, 0.4);
 }
 
 .btn-primary {
-  background: hsl(var(--primary));
-  color: hsl(var(--primary-foreground));
+  background: linear-gradient(135deg, #254153 0%, #749094 100%);
+  color: #f5f1ea;
   border: none;
   padding: 0.75rem 1.5rem;
   border-radius: calc(var(--radius) - 0.25rem);
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  letter-spacing: 0.02em;
 }
 
 .btn-primary:hover {
-  filter: brightness(1.1);
-  box-shadow: 0 0 20px -5px hsl(var(--primary));
+  background: linear-gradient(135deg, #1e3545 0%, #849da0 100%);
+  box-shadow: 0 6px 20px -4px rgba(37, 65, 83, 0.4);
+  transform: translateY(-1px);
 }
 
 .btn-primary:active {
@@ -98,52 +118,52 @@ body {
 
 /* Status Badges */
 .badge-pending {
-  background: #f59e0b22;
-  color: #f59e0b;
-  border: 1px solid #f59e0b44;
+  background: #f59e0b18;
+  color: #92660a;
+  border: 1px solid #f59e0b40;
 }
 
 .badge-in-progress {
-  background: #3b82f622;
-  color: #3b82f6;
-  border: 1px solid #3b82f644;
+  background: hsla(188, 13%, 52%, 0.12);
+  color: #3d6a6e;
+  border: 1px solid hsla(188, 13%, 52%, 0.3);
 }
 
 .badge-approved {
-  background: #10b98122;
-  color: #10b981;
-  border: 1px solid #10b98144;
+  background: #10b98118;
+  color: #0a7c57;
+  border: 1px solid #10b98140;
 }
 
 .badge-rejected {
-  background: #ef444422;
-  color: #ef4444;
-  border: 1px solid #ef444444;
+  background: #ef444418;
+  color: #b91c1c;
+  border: 1px solid #ef444440;
 }
 
 /* Priority Badges */
 .priority-urgente {
-  background: #ef444415;
-  color: #ff4d4d;
-  border: 1px solid #ef444444;
+  background: #ef444412;
+  color: #b91c1c;
+  border: 1px solid #ef444435;
 }
 
 .priority-alta {
-  background: #ef444415;
-  color: #ff4d4d;
-  border: 1px solid #ef444444;
+  background: #ef444412;
+  color: #b91c1c;
+  border: 1px solid #ef444435;
 }
 
 .priority-media {
-  background: #f59e0b15;
-  color: #f59e0b;
-  border: 1px solid #f59e0b44;
+  background: #f59e0b12;
+  color: #92660a;
+  border: 1px solid #f59e0b35;
 }
 
 .priority-baja {
-  background: #10b98115;
-  color: #10b981;
-  border: 1px solid #10b98144;
+  background: #10b98112;
+  color: #0a7c57;
+  border: 1px solid #10b98135;
 }
 
 
@@ -164,7 +184,7 @@ body {
   animation: fadeIn 0.5s ease forwards;
 }
 
-/* Mesh Background for specialized areas */
+/* Mesh Background */
 .mesh-bg {
   position: absolute;
   top: 0;
@@ -172,19 +192,19 @@ body {
   width: 100%;
   height: 100%;
   z-index: -1;
-  opacity: 0.4;
+  opacity: 0.25;
   filter: blur(100px);
 }
 
 .mesh-1 {
-  background: hsl(var(--primary));
+  background: #254153;
   width: 40%;
   height: 40%;
   transform: translate(-10%, -10%);
 }
 
 .mesh-2 {
-  background: #3b82f6;
+  background: #749094;
   width: 30%;
   height: 30%;
   transform: translate(70%, 70%);
@@ -193,7 +213,7 @@ body {
 /* Select & Dropdown Fixes */
 select {
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23254153' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 1rem center;
   background-size: 1.2em;
@@ -207,18 +227,24 @@ select option {
 }
 
 .form-control {
-  background: hsla(255, 255, 255, 0.05);
-  border: 1px solid var(--glass-border);
-  color: white;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid hsl(var(--border));
+  color: hsl(var(--foreground));
   padding: 0.8rem 1rem;
   border-radius: calc(var(--radius) - 0.5rem);
   width: 100%;
   outline: none;
   transition: all 0.2s ease;
+  font-family: 'Outfit', sans-serif;
 }
 
 .form-control:focus {
   border-color: hsl(var(--primary));
-  background: hsla(255, 255, 255, 0.1);
-  box-shadow: 0 0 0 2px hsla(var(--primary), 0.2);
+  background: rgba(255, 255, 255, 1);
+  box-shadow: 0 0 0 3px hsla(204, 38%, 24%, 0.12);
+}
+
+.form-control::placeholder {
+  color: hsl(var(--muted-foreground));
+  opacity: 0.7;
 }

@@ -25,6 +25,17 @@ export default function AdminDashboard() {
     const [newComment, setNewComment] = useState('')
     const [attachedFiles, setAttachedFiles] = useState<any[]>([])
     const [isUploading, setIsUploading] = useState(false)
+    const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+    const [toastMessage, setToastMessage] = useState<{show: boolean, message: string, type: 'success' | 'error'}>({ show: false, message: '', type: 'success' })
+    const [fileToDelete, setFileToDelete] = useState<{id: string, path: string} | null>(null)
+    const [isDeleting, setIsDeleting] = useState(false)
+
+    const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+        setToastMessage({ show: true, message, type })
+        setTimeout(() => {
+            setToastMessage(prev => ({ ...prev, show: false }))
+        }, 3000)
+    }
 
     const router = useRouter()
 
@@ -33,8 +44,9 @@ export default function AdminDashboard() {
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) return window.location.href = '/login'
 
+            setCurrentUserId(user.id)
             const { data: profile } = await supabase.schema('nexus').from('users').select('rol').eq('id', user.id).single()
-            if (profile?.rol !== 'ADMIN') window.location.href = '/home'
+            if (profile?.rol !== 'ADMIN') window.location.href = '/compras'
         }
         checkRole()
         fetchData()
@@ -102,36 +114,32 @@ export default function AdminDashboard() {
 
         setIsUploading(true)
         try {
-            const fileExt = file.name.split('.').pop()
-            const fileName = `${selectedRequest.ticket}_${Math.random().toString(36).substring(7)}.${fileExt}`
-            const filePath = `solicitudes/${selectedRequest.id}/${fileName}`
+            const formData = new FormData()
+            formData.append('file', file)
+            formData.append('solicitudId', selectedRequest.id)
+            formData.append('ticket', selectedRequest.ticket)
+            if (currentUserId) formData.append('uploadedBy', currentUserId)
 
-            // 1. Upload to Storage
-            const { error: uploadError } = await supabase.storage
-                .from('solicitudes_documentos')
-                .upload(filePath, file)
+            const response = await fetch('/api/upload', {
+                method: 'POST',
+                body: formData
+            })
 
-            if (uploadError) throw uploadError
+            const result = await response.json()
 
-            // 2. Insert into Database
-            const { error: dbError } = await supabase.schema('nexus')
-                .from('documentos')
-                .insert({
-                    solicitud_id: selectedRequest.id,
-                    filename: file.name,
-                    path: filePath
-                })
+            if (!response.ok) {
+                throw new Error(result.error || 'Error al subir archivo')
+            }
 
-            if (dbError) throw dbError
-
-            // 3. Refresh
             await fetchDocuments(selectedRequest.id)
-            alert('Archivo adjuntado correctamente.')
+            showToast('¡Archivo adjuntado correctamente!')
         } catch (err: any) {
             console.error('Error uploading file:', err)
-            alert('Error al subir archivo: ' + err.message)
+            showToast('Error al subir archivo: ' + err.message, 'error')
         } finally {
             setIsUploading(false)
+            // Reset the file input
+            e.target.value = ''
         }
     }
 
@@ -149,29 +157,35 @@ export default function AdminDashboard() {
             a.download = filename
             a.click()
         } catch (err: any) {
-            alert('Error al descargar: ' + err.message)
+            showToast('Error al descargar: ' + err.message, 'error')
         }
     }
 
-    const handleDeleteFile = async (id: string, path: string) => {
-        if (!confirm('¿Eliminar este archivo?')) return
+    const handleDeleteFile = (id: string, path: string) => {
+        setFileToDelete({ id, path })
+    }
+
+    const confirmDeleteFile = async () => {
+        if (!fileToDelete) return
         
+        setIsDeleting(true)
         try {
-            // 1. Delete from Storage
-            await supabase.storage.from('solicitudes_documentos').remove([path])
-            
-            // 2. Delete from DB
-            const { error } = await supabase.schema('nexus')
-                .from('documentos')
-                .delete()
-                .eq('id', id)
-            
-            if (error) throw error
-            
-            // 3. Refresh
+            const response = await fetch('/api/upload', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ documentId: fileToDelete.id, path: fileToDelete.path })
+            })
+
+            const result = await response.json()
+            if (!response.ok) throw new Error(result.error || 'Error al eliminar')
+
             if (selectedRequest) await fetchDocuments(selectedRequest.id)
+            showToast('¡Archivo eliminado exitosamente!')
         } catch (err: any) {
-            alert('Error al eliminar: ' + err.message)
+            showToast('Error al eliminar: ' + err.message, 'error')
+        } finally {
+            setIsDeleting(false)
+            setFileToDelete(null)
         }
     }
 
@@ -255,11 +269,78 @@ export default function AdminDashboard() {
     });
 
     return (
-        <div className="admin-container animate-fade-in">
-            <nav className="admin-nav" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '3rem' }}>
+        <>
+            {/* Custom Toast Notification */}
+            <div className={`toast-notification ${toastMessage.show ? 'show' : ''} ${toastMessage.type}`}>
+                {toastMessage.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+                <span>{toastMessage.message}</span>
+            </div>
+
+            {/* Delete Confirmation Modal */}
+            {fileToDelete && (
+                <div style={{ 
+                    position: 'fixed', 
+                    top: 0, left: 0, right: 0, bottom: 0, 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    background: 'rgba(0,0,0,0.85)', 
+                    zIndex: 9999,
+                    padding: '2rem'
+                }}>
+                    <div className="modal-content glass animate-slide-up" style={{ 
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '16px',
+                        maxWidth: '400px', 
+                        padding: '2rem', 
+                        textAlign: 'center',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '1rem',
+                        color: 'hsl(var(--foreground))'
+                    }}>
+                        <div style={{
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            color: '#ef4444',
+                            padding: '1rem',
+                            borderRadius: '50%',
+                            display: 'inline-flex',
+                            marginBottom: '0.5rem'
+                        }}>
+                            <AlertTriangle size={32} />
+                        </div>
+                        <h2 style={{ fontSize: '1.25rem', margin: 0 }}>¿Eliminar archivo?</h2>
+                        <p style={{ opacity: 0.7, fontSize: '0.9rem', margin: 0 }}>
+                            Esta acción no se puede deshacer y el archivo será eliminado permanentemente de la base de datos.
+                        </p>
+                        <div style={{ display: 'flex', gap: '1rem', width: '100%', marginTop: '1.5rem' }}>
+                            <button 
+                                className="action-btn" 
+                                style={{ flex: 1, background: 'rgba(255,255,255,0.05)', color: 'white' }}
+                                onClick={() => setFileToDelete(null)}
+                                disabled={isDeleting}
+                            >
+                                Cancelar
+                            </button>
+                            <button 
+                                className="action-btn" 
+                                style={{ flex: 1, background: '#ef4444', color: 'white', border: 'none' }}
+                                onClick={confirmDeleteFile}
+                                disabled={isDeleting}
+                            >
+                                {isDeleting ? 'Eliminando...' : 'Sí, eliminar'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <div className="admin-container animate-fade-in">
+                <nav className="admin-nav" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '3rem' }}>
                 <div style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
-                    <img src="/logo.png" alt="Nexus" style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'white', border: '2px solid var(--glass-border)' }} />
-                    <a onClick={() => router.push('/home')} style={{ cursor: 'pointer' }}>Volver al Menú</a>
+                    <img src="/logo.png" alt="Nexus" style={{ width: '36px', height: '36px', borderRadius: '8px', background: '#f5f1ea', border: '1px solid rgba(116,144,148,0.3)', padding: '2px', objectFit: 'contain' }} />
+                    <a onClick={() => router.push('/compras')} style={{ cursor: 'pointer' }}>Volver al Menú</a>
                     <a onClick={() => router.push('/admin')} className="active" style={{ cursor: 'pointer' }}>Gestión</a>
                     <a onClick={() => router.push('/reports')} style={{ cursor: 'pointer' }}>Reportes</a>
                 </div>
@@ -314,7 +395,7 @@ export default function AdminDashboard() {
 
             <div className="card glass">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '2rem', marginBottom: '3rem' }}>
-                    <img src="/logo.png" alt="Logo" style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'white', border: '2px solid var(--glass-border)' }} />
+                    <img src="/logo.png" alt="Logo" style={{ width: '44px', height: '44px', borderRadius: '8px', background: '#f5f1ea', border: '1px solid rgba(116,144,148,0.3)', padding: '2px', objectFit: 'contain' }} />
                     <h1 style={{ margin: 0 }}>Reportes de Gestión</h1>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem', alignItems: 'center' }}>
@@ -450,20 +531,29 @@ export default function AdminDashboard() {
                     </table>
                 </div>
             </div>
+            </div>
 
             {/* Modal de Gestión */}
             {selectedRequest && (
-                <div className="modal-overlay animate-fade-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 1000, padding: '2rem' }}>
+                <div style={{ 
+                    position: 'fixed', 
+                    top: 0, left: 0, right: 0, bottom: 0, 
+                    background: 'rgba(0,0,0,0.8)', 
+                    zIndex: 1000, 
+                    padding: '2rem 1rem',
+                    overflowY: 'auto',
+                    display: 'flex'
+                }}>
                     <div className="modal-content glass animate-scale-in" style={{ 
-                        width: 'min(1000px, 98%)', 
-                        maxHeight: '92vh', 
-                        overflowY: 'auto', 
-                        overflowX: 'hidden',
+                        width: '100%',
+                        maxWidth: '1000px', 
+                        margin: 'auto',
                         position: 'relative', 
-                        padding: '2.5rem 2.5rem 5rem 2.5rem',
+                        padding: '2.5rem',
                         border: '1px solid rgba(255,255,255,0.1)',
                         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-                        boxSizing: 'border-box'
+                        boxSizing: 'border-box',
+                        borderRadius: '16px'
                     }}>
                         <button
                             className="close-btn"
@@ -675,6 +765,6 @@ export default function AdminDashboard() {
                     </div>
                 </div>
             )}
-        </div>
+        </>
     )
 }

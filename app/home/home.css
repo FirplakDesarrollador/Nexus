@@ -1,29 +1,56 @@
 .home-container {
-    max-width: 1200px;
+    max-width: 1300px;
     margin: 0 auto;
-    padding: 4rem 2rem;
+    padding: 3rem 2rem;
 }
 
+/* ─── Header con logo grande ─── */
 .header {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
     align-items: center;
-    margin-bottom: 4rem;
+    gap: 2rem;
+    margin-bottom: 3.5rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid hsl(var(--border));
+}
+
+.header-logo {
+    width: 130px;
+    height: auto;
+    object-fit: contain;
+    background: #f5f1ea;
+    border-radius: 12px;
+    padding: 8px;
+    border: 1px solid rgba(37, 65, 83, 0.12);
+    box-shadow: 0 2px 12px rgba(37, 65, 83, 0.1);
+    transition: transform 0.3s ease;
+}
+
+.header-logo:hover {
+    transform: scale(1.03);
 }
 
 .welcome-section h1 {
-    font-size: 2.5rem;
-    margin-bottom: 0.5rem;
+    font-size: 2.2rem;
+    font-weight: 700;
+    margin-bottom: 0.3rem;
+    color: hsl(var(--foreground));
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
 .welcome-section p {
     color: hsl(var(--muted-foreground));
+    font-size: 0.95rem;
 }
 
+/* ─── Cards grid ─── */
 .cards-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 2rem;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
 }
 
 .nav-card {
@@ -34,12 +61,14 @@
     cursor: pointer;
     text-decoration: none;
     color: inherit;
+    padding: 2.5rem 2rem;
+    transition: all 0.3s ease;
 }
 
 .icon-wrapper {
-    width: 64px;
-    height: 64px;
-    background: hsla(var(--primary), 0.1);
+    width: 68px;
+    height: 68px;
+    background: hsla(204, 38%, 24%, 0.08);
     border-radius: 1.25rem;
     display: flex;
     align-items: center;
@@ -47,31 +76,67 @@
     color: hsl(var(--primary));
     margin-bottom: 1.5rem;
     transition: all 0.3s ease;
+    border: 1px solid hsla(204, 38%, 24%, 0.1);
 }
 
 .nav-card:hover .icon-wrapper {
     background: hsl(var(--primary));
-    color: white;
-    transform: scale(1.1) rotate(5deg);
+    color: #f5f1ea;
+    transform: scale(1.1) rotate(4deg);
+    border-color: transparent;
+    box-shadow: 0 8px 20px -4px rgba(37, 65, 83, 0.35);
 }
 
 .nav-card h2 {
-    font-size: 1.5rem;
-    margin-bottom: 0.75rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 0.6rem;
+    color: hsl(var(--foreground));
 }
 
 .nav-card p {
     font-size: 0.875rem;
     color: hsl(var(--muted-foreground));
-    line-height: 1.5;
+    line-height: 1.6;
 }
 
+/* ─── User badge ─── */
 .user-badge {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    background: var(--glass);
-    padding: 0.5rem 1rem;
+    gap: 0.75rem;
+    background: rgba(255, 255, 255, 0.8);
+    padding: 0.6rem 1.2rem;
     border-radius: 9999px;
-    border: 1px solid var(--glass-border);
+    border: 1px solid hsl(var(--border));
+    box-shadow: 0 1px 4px rgba(37, 65, 83, 0.08);
+    white-space: nowrap;
+}
+
+/* ─── Modules ─── */
+.module-section {
+    background: rgba(255, 255, 255, 0.4);
+    border: 1px solid rgba(116, 144, 148, 0.15);
+    border-radius: var(--radius);
+    padding: 2.5rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 4px 20px rgba(37, 65, 83, 0.05);
+}
+
+.module-header {
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid rgba(116, 144, 148, 0.1);
+}
+
+.module-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: hsl(var(--foreground));
+    margin-bottom: 0.25rem;
+}
+
+.module-subtitle {
+    font-size: 0.95rem;
+    color: hsl(var(--muted-foreground));
 }

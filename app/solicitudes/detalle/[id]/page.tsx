@@ -104,7 +104,7 @@ export default function RequestDetailPage() {
 
     return (
         <div className="list-container" style={{ maxWidth: '900px' }}>
-            <Link href="/solicitudes/estado" className="btn-primary" style={{ background: 'transparent', color: 'white', padding: '0.5rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Link href="/solicitudes/estado" className="btn-back" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none', color: '#254153', fontWeight: 600, transition: 'opacity 0.2s' }}>
                 <ArrowLeft size={16} /> Volver al Listado
             </Link>
 
@@ -131,6 +131,15 @@ export default function RequestDetailPage() {
                             <label style={{ display: 'block', fontSize: '0.75rem', opacity: 0.5, textTransform: 'uppercase', marginBottom: '0.25rem' }}>Cantidad</label>
                             <span style={{ fontWeight: 600 }}>{request.cantidad} {request.unidad_medida || 'Unidades'}</span>
                         </div>
+
+                        {request.presupuesto_estimado != null && (
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.75rem', opacity: 0.5, textTransform: 'uppercase', marginBottom: '0.25rem' }}>Presupuesto Estimado</label>
+                                <span style={{ fontWeight: 600, color: 'hsl(var(--primary))' }}>
+                                    ${new Intl.NumberFormat('es-CO', { minimumFractionDigits: 0 }).format(request.presupuesto_estimado)} COP
+                                </span>
+                            </div>
+                        )}
 
                         <div>
                             <label style={{ display: 'block', fontSize: '0.75rem', opacity: 0.5, textTransform: 'uppercase', marginBottom: '0.25rem' }}>Propósito</label>

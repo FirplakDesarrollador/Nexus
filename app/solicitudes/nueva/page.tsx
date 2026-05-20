@@ -270,9 +270,10 @@ export default function NewRequestPage() {
     }
 
     return (
-        <div className="request-container">
-            <Link href="/home" className="btn-primary" style={{ background: 'transparent', color: 'white', padding: '0.5rem 0' }}>
-                <ArrowLeft size={16} /> Volver al Inicio
+        <>
+            <div className="request-container">
+            <Link href="/compras" className="btn-back" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none', color: '#254153', fontWeight: 600, marginBottom: '1.5rem', transition: 'opacity 0.2s' }}>
+                <ArrowLeft size={16} /> Volver al submenú
             </Link>
 
             <div className="request-card glass animate-fade-in">
@@ -380,14 +381,14 @@ export default function NewRequestPage() {
                                                     gap: '0.5rem',
                                                     padding: '0.75rem',
                                                     borderRadius: '0.5rem',
-                                                    border: `1px solid ${isSelected ? color : 'var(--glass-border)'}`,
-                                                    background: isSelected ? `${color}22` : 'rgba(255,255,255,0.05)',
-                                                    color: isSelected ? color : 'rgba(255,255,255,0.5)',
+                                                    border: `1px solid ${isSelected ? color : 'rgba(37, 65, 83, 0.15)'}`,
+                                                    background: isSelected ? `${color}15` : '#ffffff',
+                                                    color: isSelected ? color : '#254153',
                                                     cursor: 'pointer',
                                                     transition: 'all 0.2s',
                                                     fontSize: '0.85rem',
-                                                    fontWeight: isSelected ? 600 : 400,
-                                                    boxShadow: isSelected ? `0 0 15px -5px ${color}55` : 'none'
+                                                    fontWeight: isSelected ? 600 : 500,
+                                                    boxShadow: isSelected ? `0 2px 8px -2px ${color}33` : 'none'
                                                 }}
                                             >
                                                 {p === 'Urgente' && <Bell size={14} />}
@@ -493,7 +494,8 @@ export default function NewRequestPage() {
                     </button>
                 </form>
             </div>
-            {showSuccess && <SuccessModal ticket={lastTicket} onClose={() => router.push('/home')} />}
-        </div>
+            </div>
+            {showSuccess && <SuccessModal ticket={lastTicket} onClose={() => router.push('/compras')} />}
+        </>
     )
 }
