@@ -49,63 +49,68 @@ export default function HomePage() {
     return (
         <div className="home-container">
             <header className="header">
+                {/* Logo grande */}
+                <img src="/logo.png" alt="Nexus" className="header-logo" />
+
+                {/* Bienvenida */}
                 <div className="welcome-section">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
-                        <img src="/logo.png" alt="Logo" style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'white', border: '2px solid var(--glass-border)' }} />
-                        <h1 style={{ margin: 0 }}>Hola, {profile?.nombre || user.user_metadata?.nombre || 'Solicitante'}</h1>
-                    </div>
+                    <h1>
+                        👋 Hola, {profile?.nombre || user.user_metadata?.nombre || 'Solicitante'}
+                    </h1>
                     <p>Bienvenido al Centro de Gestión de Compras Nexus.</p>
                 </div>
 
-                <div className="user-badge glass">
-                    <User size={18} />
+                {/* Badge usuario */}
+                <div className="user-badge">
+                    <User size={16} style={{ color: 'hsl(var(--primary))' }} />
                     <div style={{ display: 'flex', flexDirection: 'column', fontSize: '0.75rem' }}>
-                        <span>{user.email}</span>
-                        {profile && <span style={{ color: '#10b981', fontSize: '0.65rem', fontWeight: 'bold' }}>✓ {profile.rol}</span>}
+                        <span style={{ fontWeight: 500, color: 'hsl(var(--foreground))' }}>{user.email}</span>
+                        {profile && <span style={{ color: '#749094', fontSize: '0.65rem', fontWeight: 700 }}>✓ {profile.rol}</span>}
                     </div>
                     <button
                         onClick={handleLogout}
-                        style={{ background: 'none', border: 'none', color: 'hsl(var(--destructive))', cursor: 'pointer', marginLeft: '1rem', display: 'flex', alignItems: 'center' }}
+                        style={{ background: 'none', border: 'none', color: 'hsl(var(--destructive))', cursor: 'pointer', display: 'flex', alignItems: 'center', marginLeft: '0.25rem' }}
+                        title="Cerrar sesión"
                     >
-                        <LogOut size={18} />
+                        <LogOut size={16} />
                     </button>
                 </div>
             </header>
 
-            <div className="cards-grid">
-                <Link href="/solicitudes/nueva" className="nav-card card">
-                    <div className="icon-wrapper">
-                        <PlusCircle size={32} />
-                    </div>
-                    <h2>Realizar Solicitud</h2>
-                    <p>Inicia un nuevo proceso de compra completando el formulario de 5 bloques.</p>
-                </Link>
-
-                <Link href="/solicitudes/estado" className="nav-card card">
-                    <div className="icon-wrapper">
-                        <Clock size={32} />
-                    </div>
-                    <h2>Estado de Compra</h2>
-                    <p>Consulta el progreso de tus solicitudes activas y revisa observaciones.</p>
-                </Link>
-
-                <Link href="/solicitudes/historial" className="nav-card card">
-                    <div className="icon-wrapper">
-                        <History size={32} />
-                    </div>
-                    <h2>Historial</h2>
-                    <p>Revisa solicitudes cerradas, completadas o rechazadas con sus detalles.</p>
-                </Link>
-
-                {profile?.rol === 'ADMIN' && (
-                    <Link href="/admin" className="nav-card card animate-fade-in" style={{ borderColor: 'hsl(var(--primary))' }}>
-                        <div className="icon-wrapper" style={{ background: 'hsla(var(--primary), 0.2)', color: 'hsl(var(--primary))' }}>
-                            <User size={32} />
+            <div className="module-section animate-fade-in">
+                <div className="module-header">
+                    <h2 className="module-title">Módulos Disponibles</h2>
+                    <p className="module-subtitle">Selecciona el área con la que deseas trabajar</p>
+                </div>
+                
+                <div className="cards-grid">
+                    {/* Módulo Costos */}
+                    <Link href="/costos" className="nav-card card">
+                        <div className="icon-wrapper">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
                         </div>
-                        <h2>Panel Admin</h2>
-                        <p>Acceso maestro para gestionar todas las solicitudes y métricas del sistema.</p>
+                        <h2>Costos</h2>
+                        <p>Gestión de variación de costos y listas oficiales de precios.</p>
                     </Link>
-                )}
+
+                    {/* Módulo Flujo de Compras */}
+                    <Link href="/compras" className="nav-card card">
+                        <div className="icon-wrapper">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>
+                        </div>
+                        <h2>Flujo de Compras</h2>
+                        <p>Gestión de requerimientos, solicitudes de compra y panel administrativo.</p>
+                    </Link>
+
+                    {/* Módulo Bodega MP-08 (Placeholder) */}
+                    <div className="nav-card card" style={{ opacity: 0.6, cursor: 'not-allowed' }}>
+                        <div className="icon-wrapper" style={{ filter: 'grayscale(100%)' }}>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                        </div>
+                        <h2>Bodega MP-08</h2>
+                        <p>Próximamente. Control de existencias e inventario físico.</p>
+                    </div>
+                </div>
             </div>
         </div>
     )

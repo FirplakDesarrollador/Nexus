@@ -32,7 +32,7 @@ export default function ReportsPage() {
             </Link>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '2rem', marginBottom: '3rem' }}>
-                <img src="/logo.png" alt="Logo" style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'white', border: '2px solid var(--glass-border)' }} />
+                <img src="/logo.png" alt="Logo" style={{ width: '44px', height: '44px', borderRadius: '8px', background: '#f5f1ea', border: '1px solid rgba(116,144,148,0.3)', padding: '2px', objectFit: 'contain' }} />
                 <h1 style={{ margin: 0 }}>Reportes de Gestión</h1>
             </div>
 

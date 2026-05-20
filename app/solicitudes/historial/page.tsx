@@ -31,7 +31,7 @@ export default function RequestHistoryPage() {
         fetchRequests()
     }, [supabase])
 
-    const tabs = ['Todos', 'Revisión', 'En Cotización', 'Aprobado', 'En Camino', 'Completada', 'Rechazada']
+    const tabs = ['Todos', 'Aprobado', 'Revisión', 'En Cotización', 'En Camino', 'Completada', 'Rechazada']
 
     const filteredRequests = requests.filter(r => {
         const matchesSearch = r.titulo.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -44,11 +44,11 @@ export default function RequestHistoryPage() {
 
     return (
         <div className="list-container">
-            <Link href="/home" className="btn-primary" style={{ background: 'transparent', color: 'white', padding: '0.5rem 0' }}>
-                <ArrowLeft size={16} /> Volver al Inicio
+            <Link href="/compras" className="btn-back" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none', color: '#254153', fontWeight: 600, transition: 'opacity 0.2s' }}>
+                <ArrowLeft size={16} /> Volver al submenú
             </Link>
 
-            <h1 style={{ marginTop: '2rem', marginBottom: '1rem' }}>Despensa de Historial</h1>
+            <h1 style={{ marginTop: '2rem', marginBottom: '1rem' }}>Historial de compras</h1>
             <p style={{ color: 'hsl(var(--muted-foreground))', marginBottom: '2.5rem' }}>Consulta tus procesos finalizados.</p>
 
             <div className="tabs" style={{ display: 'flex', gap: '0.75rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
@@ -56,12 +56,17 @@ export default function RequestHistoryPage() {
                     <button
                         key={t}
                         onClick={() => setTab(t)}
-                        className={`btn-primary ${tab === t ? '' : 'glass'}`}
                         style={{
-                            background: tab === t ? 'hsl(var(--primary))' : 'transparent',
-                            fontSize: '0.7rem',
-                            padding: '0.4rem 0.8rem',
-                            minWidth: 'auto'
+                            background: tab === t ? 'hsl(var(--primary))' : 'rgba(37, 65, 83, 0.05)',
+                            color: tab === t ? 'hsl(var(--primary-foreground))' : 'hsl(var(--primary))',
+                            border: tab === t ? '1px solid hsl(var(--primary))' : '1px solid rgba(37, 65, 83, 0.15)',
+                            borderRadius: '2rem',
+                            fontSize: '0.8rem',
+                            fontWeight: 600,
+                            padding: '0.4rem 1rem',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            outline: 'none',
                         }}
                     >
                         {t}
@@ -95,10 +100,17 @@ export default function RequestHistoryPage() {
                                 <div style={{ fontSize: '0.8rem', opacity: 0.6, marginTop: '0.15rem' }}>
                                     Responsable: <strong>{req.responsable?.nombre || 'Sin asignar'}</strong>
                                 </div>
-                                <span className="ticket-qty" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'hsl(var(--primary))', display: 'block', marginTop: '0.5rem' }}>
-                                    {req.cantidad} {req.unidad_medida || 'Unid.'}
-                                </span>
-                                <span className="ticket-meta">
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center', marginTop: '0.5rem' }}>
+                                    <span className="ticket-qty" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'hsl(var(--primary))' }}>
+                                        {req.cantidad} {req.unidad_medida || 'Unid.'}
+                                    </span>
+                                    {req.presupuesto_estimado != null && (
+                                        <span style={{ fontSize: '0.8rem', fontWeight: 500, color: '#254153', background: 'rgba(37, 65, 83, 0.05)', padding: '0.15rem 0.5rem', borderRadius: '4px' }}>
+                                            Presupuesto: ${new Intl.NumberFormat('es-CO', { minimumFractionDigits: 0 }).format(req.presupuesto_estimado)}
+                                        </span>
+                                    )}
+                                </div>
+                                <span className="ticket-meta" style={{ display: 'block', marginTop: '0.25rem' }}>
                                     {req.closed_at ? `Cerrada el ${new Date(req.closed_at).toLocaleDateString()}` : `Creada el ${new Date(req.created_at).toLocaleDateString()}`}
                                 </span>
                             </div>
@@ -128,6 +140,12 @@ export default function RequestHistoryPage() {
                                         {req.prioridad}
                                     </span>
                                 )}
+                            </div>
+
+                            <div className="ticket-actions">
+                                <Link href={`/solicitudes/detalle/${req.id}`} className="btn-primary" style={{ padding: '0.5rem 1rem', fontSize: '0.75rem' }}>
+                                    Detalle
+                                </Link>
                             </div>
 
                             {req.motivo_rechazo && req.estado_actual === 'Rechazada' && (
