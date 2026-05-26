@@ -7,7 +7,7 @@ import {
     Search, Filter, Calendar, User as UserIcon, Building2, Package, 
     CreditCard, CheckCircle2, X, Eye, CheckCircle, XCircle, 
     Truck, Wallet, Bell, AlertCircle, Clock, AlertTriangle, FileText,
-    Paperclip, Trash2, Download, Image as ImageIcon
+    Paperclip, Trash2, Download, Image as ImageIcon, TrendingUp, TrendingDown
 } from 'lucide-react'
 import './admin.css'
 
@@ -29,6 +29,10 @@ export default function AdminDashboard() {
     const [toastMessage, setToastMessage] = useState<{show: boolean, message: string, type: 'success' | 'error'}>({ show: false, message: '', type: 'success' })
     const [fileToDelete, setFileToDelete] = useState<{id: string, path: string} | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
+    const [showCierreModal, setShowCierreModal] = useState(false)
+    const [cierreForm, setCierreForm] = useState({ proveedor: '', valor_total_compra: '', cantidad_total: '', tipo_resultado: 'Saving' })
+    const [plannerTask, setPlannerTask] = useState<any | null>(null)
+    const [isLoadingPlanner, setIsLoadingPlanner] = useState(false)
 
     const showToast = (message: string, type: 'success' | 'error' = 'success') => {
         setToastMessage({ show: true, message, type })
@@ -37,7 +41,54 @@ export default function AdminDashboard() {
         }, 3000)
     }
 
+    const syncPlanner = async (action: 'comment' | 'file' | 'complete', payload?: any) => {
+        if (!plannerTask?.id) return;
+        try {
+            const res = await fetch('/api/planner/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ taskId: plannerTask.id, action, payload })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                console.error('Planner Sync Error Response:', data);
+                showToast(`Error sincronizando con Planner: ${data.error}`, 'error');
+            }
+        } catch (err: any) {
+            console.error('Error syncing planner fetch:', err);
+            showToast(`Error de conexión con Planner: ${err.message}`, 'error');
+        }
+    }
+
     const router = useRouter()
+
+    useEffect(() => {
+        if (!selectedRequest) {
+            setPlannerTask(null)
+            return
+        }
+        
+        const fetchPlannerTask = async () => {
+            setIsLoadingPlanner(true)
+            try {
+                // cache-busting timestamp included
+                const res = await fetch(`/api/planner?ticket=${selectedRequest.ticket}&_t=${Date.now()}`)
+                const data = await res.json()
+                if (data.found && data.task) {
+                    setPlannerTask(data.task)
+                } else {
+                    setPlannerTask(null)
+                }
+            } catch (err) {
+                console.error('Error fetching planner task', err)
+                setPlannerTask(null)
+            } finally {
+                setIsLoadingPlanner(false)
+            }
+        }
+
+        fetchPlannerTask()
+    }, [selectedRequest])
 
     useEffect(() => {
         const checkRole = async () => {
@@ -131,6 +182,9 @@ export default function AdminDashboard() {
                 throw new Error(result.error || 'Error al subir archivo')
             }
 
+            // Send storage path to backend — it generates the signed Supabase URL server-side
+            await syncPlanner('file', { path: result.path, filename: file.name })
+
             await fetchDocuments(selectedRequest.id)
             showToast('¡Archivo adjuntado correctamente!')
         } catch (err: any) {
@@ -217,6 +271,9 @@ export default function AdminDashboard() {
                         actor_id: user?.id
                     })
                 if (histError) throw histError
+
+                // Sync with planner
+                await syncPlanner('comment', { comment: observation })
             }
 
             // 3. Refresh data
@@ -232,21 +289,53 @@ export default function AdminDashboard() {
         setIsSaving(false)
     }
 
-    const handleCloseRequest = async (id: string) => {
-        if (!confirm('¿Estás seguro de finalizar la gestión de esta solicitud? Se moverá al historial.')) return
+    const handleCloseRequest = () => {
+        setCierreForm({ proveedor: '', valor_total_compra: '', cantidad_total: '', tipo_resultado: 'Saving' })
+        setShowCierreModal(true)
+    }
 
+    const handleConfirmCierre = async () => {
+        if (!selectedRequest) return
+        if (!cierreForm.proveedor.trim() || !cierreForm.valor_total_compra || !cierreForm.cantidad_total) {
+            showToast('Completa todos los campos del cierre.', 'error')
+            return
+        }
         setIsSaving(true)
-        const { error } = await supabase.schema('nexus')
-            .from('solicitudes')
-            .update({
-                closed_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', id)
+        try {
+            const presupuesto = selectedRequest.presupuesto_estimado || 0
+            const valorCompra = parseFloat(cierreForm.valor_total_compra)
+            const tipo_resultado = cierreForm.tipo_resultado
 
-        if (!error) {
-            await fetchData()
+            // 1. Insertar cierre
+            const { error: cierreError } = await supabase.schema('nexus')
+                .from('cierres_compra')
+                .insert({
+                    solicitud_id: selectedRequest.id,
+                    proveedor: cierreForm.proveedor.trim(),
+                    valor_total_compra: valorCompra,
+                    cantidad_total: parseInt(cierreForm.cantidad_total),
+                    tipo_resultado,
+                    cerrado_por: currentUserId
+                })
+            if (cierreError) throw cierreError
+
+            // 2. Cerrar solicitud
+            const { error: closeError } = await supabase.schema('nexus')
+                .from('solicitudes')
+                .update({ closed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+                .eq('id', selectedRequest.id)
+            if (closeError) throw closeError
+
+            // 3. Close Planner task
+            await syncPlanner('complete')
+            setPlannerTask((prev: any) => prev ? { ...prev, percentComplete: 100 } : null)
+
+            showToast(`¡Gestión finalizada! Resultado: ${tipo_resultado}`)
+            setShowCierreModal(false)
             setSelectedRequest(null)
+            await fetchData()
+        } catch (err: any) {
+            showToast('Error al finalizar: ' + err.message, 'error')
         }
         setIsSaving(false)
     }
@@ -336,6 +425,80 @@ export default function AdminDashboard() {
                 </div>
             )}
 
+            {/* Modal Cierre de Compra */}
+            {showCierreModal && selectedRequest && (() => {
+                const presupuesto = selectedRequest.presupuesto_estimado || 0
+                const valorCompra = parseFloat(cierreForm.valor_total_compra) || 0
+                const diferencia = presupuesto - valorCompra
+                const tipo = cierreForm.tipo_resultado
+                const hasValues = cierreForm.valor_total_compra !== ''
+                return (
+                    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.85)', zIndex: 9999, padding: '2rem' }}>
+                        <div className="modal-content glass animate-scale-in" style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', maxWidth: '480px', width: '100%', padding: '2rem', color: 'hsl(var(--foreground))', position: 'relative' }}>
+                            <button onClick={() => setShowCierreModal(false)} style={{ position: 'absolute', right: '1rem', top: '1rem', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.5 }}><X size={20} /></button>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                                <div style={{ background: 'rgba(16,185,129,0.1)', color: '#10b981', padding: '0.6rem', borderRadius: '50%', display: 'inline-flex' }}><CheckCircle2 size={24} /></div>
+                                <div>
+                                    <h2 style={{ margin: 0, fontSize: '1.1rem' }}>Finalizar Gestión</h2>
+                                    <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.5 }}>{selectedRequest.ticket} · {selectedRequest.titulo}</p>
+                                </div>
+                            </div>
+
+                            <div className="form-group" style={{ marginBottom: '1rem' }}>
+                                <label>Proveedor con el que se realizó la compra</label>
+                                <input type="text" className="form-control" placeholder="Ej: Proveedor S.A.S" value={cierreForm.proveedor} onChange={e => setCierreForm(p => ({ ...p, proveedor: e.target.value }))} />
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                                <div className="form-group">
+                                    <label>Valor total de la compra ($)</label>
+                                    <input type="number" className="form-control" placeholder="0" value={cierreForm.valor_total_compra} onChange={e => setCierreForm(p => ({ ...p, valor_total_compra: e.target.value }))} />
+                                </div>
+                                <div className="form-group">
+                                    <label>Cantidad total</label>
+                                    <input type="number" className="form-control" placeholder="0" value={cierreForm.cantidad_total} onChange={e => setCierreForm(p => ({ ...p, cantidad_total: e.target.value }))} />
+                                </div>
+                            </div>
+
+                            <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                                <label>Resultado de la Negociación</label>
+                                <select 
+                                    className="form-control" 
+                                    value={cierreForm.tipo_resultado} 
+                                    onChange={e => setCierreForm(p => ({ ...p, tipo_resultado: e.target.value }))}
+                                >
+                                    <option value="Saving">Saving (Ahorro vs Presupuesto)</option>
+                                    <option value="Avoidance">Avoidance (Prevención de alza / Mejor que mercado)</option>
+                                    <option value="Cost Overrun">Cost Overrun (Sobrecosto vs Presupuesto)</option>
+                                </select>
+                            </div>
+
+                            {hasValues && (
+                                <div style={{ background: tipo === 'Cost Overrun' ? 'rgba(239,68,68,0.08)' : tipo === 'Saving' ? 'rgba(16,185,129,0.08)' : 'rgba(245,158,11,0.08)', border: `1px solid ${tipo === 'Cost Overrun' ? '#ef4444' : tipo === 'Saving' ? '#10b981' : '#f59e0b'}`, borderRadius: '0.75rem', padding: '1rem', marginBottom: '1.5rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', opacity: 0.7, marginBottom: '0.5rem' }}>
+                                        <span>Presupuesto estimado</span><span>${presupuesto.toLocaleString()}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', opacity: 0.7, marginBottom: '0.75rem' }}>
+                                        <span>Valor real de compra</span><span>${valorCompra.toLocaleString()}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, color: tipo === 'Cost Overrun' ? '#ef4444' : tipo === 'Saving' ? '#10b981' : '#f59e0b' }}>
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                            {tipo === 'Saving' || tipo === 'Avoidance' ? <TrendingDown size={16} /> : <TrendingUp size={16} />}
+                                            {tipo}
+                                        </span>
+                                        <span>{diferencia >= 0 ? '+' : '-'}${Math.abs(diferencia).toLocaleString()}</span>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <button className="action-btn" style={{ flex: 1 }} onClick={() => setShowCierreModal(false)} disabled={isSaving}>Cancelar</button>
+                                <button className="action-btn" style={{ flex: 1, background: '#10b981', color: 'white', border: 'none', fontWeight: 600 }} onClick={handleConfirmCierre} disabled={isSaving}>{isSaving ? 'Guardando...' : 'Confirmar Cierre'}</button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            })()}
+
             <div className="admin-container animate-fade-in">
                 <nav className="admin-nav" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '3rem' }}>
                 <div style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
@@ -383,14 +546,7 @@ export default function AdminDashboard() {
                     <span className="stat-value" style={{ color: '#ff4d4d' }}>{stats.urgent}</span>
                     <AlertTriangle size={20} style={{ color: '#ff4d4d' }} />
                 </div>
-                <div 
-                    className={`stat-card glass shadow-lg clickable ${filterType === 'ready-to-close' ? 'active' : ''}`}
-                    onClick={() => setFilterType(filterType === 'ready-to-close' ? 'all' : 'ready-to-close')}
-                >
-                    <span className="stat-label">Listas para Cierre</span>
-                    <span className="stat-value" style={{ color: '#10b981' }}>{stats.readyToClose}</span>
-                    <CheckCircle size={20} style={{ color: '#10b981' }} />
-                </div>
+
             </div>
 
             <div className="card glass">
@@ -406,7 +562,7 @@ export default function AdminDashboard() {
                                 Filtrando por: {
                                     filterType === 'pending' ? 'Pendientes' : 
                                     filterType === 'in-progress' ? 'En Proceso' : 
-                                    filterType === 'urgent' ? 'Urgentes' : 'Listas para Cierre'
+                                    filterType === 'urgent' ? 'Urgentes' : ''
                                 }
                                 <X size={12} style={{ marginLeft: '0.5rem', cursor: 'pointer' }} onClick={() => setFilterType('all')} />
                             </span>
@@ -626,6 +782,50 @@ export default function AdminDashboard() {
                             </div>
                         </div>
 
+                        {/* --- PLANNER TASK CARD --- */}
+                        <div className="glass" style={{
+                            marginTop: '2rem',
+                            padding: '1.5rem',
+                            border: '1px solid rgba(139, 92, 246, 0.3)',
+                            borderRadius: '1rem',
+                            background: 'rgba(139, 92, 246, 0.05)',
+                        }}>
+                            <h3 style={{ margin: '0 0 1rem 0', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#a78bfa' }}>
+                                <CheckCircle size={16} /> Tarea de Microsoft Planner
+                            </h3>
+                            
+                            {isLoadingPlanner ? (
+                                <div style={{ fontSize: '0.85rem', opacity: 0.6, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <Clock size={14} className="animate-spin" /> Buscando tarea asociada en Planner...
+                                </div>
+                            ) : plannerTask ? (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.25rem' }}>{plannerTask.title}</div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.8rem', opacity: 0.7 }}>
+                                            <span>Progreso: {plannerTask.percentComplete}%</span>
+                                            {plannerTask.priority === 1 && <span style={{ color: '#ef4444' }}>Urgente</span>}
+                                            {plannerTask.dueDateTime && <span>Vence: {new Date(plannerTask.dueDateTime).toLocaleDateString()}</span>}
+                                        </div>
+                                    </div>
+                                    <a 
+                                        href={plannerTask.url} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="action-btn"
+                                        style={{ background: '#8b5cf6', color: 'white', border: 'none', textDecoration: 'none', fontSize: '0.8rem', padding: '0.5rem 1rem' }}
+                                    >
+                                        Abrir en Planner
+                                    </a>
+                                </div>
+                            ) : (
+                                <div style={{ fontSize: '0.85rem', opacity: 0.6 }}>
+                                    No se encontró ninguna tarea en Planner para el ticket {selectedRequest.ticket}.
+                                </div>
+                            )}
+                        </div>
+                        {/* ----------------------- */}
+
                         <div className="management-actions glass" style={{ 
                             marginTop: '3rem', 
                             padding: '2rem', 
@@ -750,7 +950,7 @@ export default function AdminDashboard() {
                                         fontSize: '0.8rem',
                                         padding: '0.5rem 1rem'
                                     }}
-                                    onClick={() => handleCloseRequest(selectedRequest.id)}
+                                    onClick={() => handleCloseRequest()}
                                     disabled={isSaving || selectedRequest.estado_actual === 'Revisión'}
                                 >
                                     Finalizar Gestión (Mover a Historial)
