@@ -6,16 +6,17 @@
 
 .stats-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 3rem;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
 }
 
 .stat-card {
-    padding: 1.5rem;
+    padding: 0.75rem 1rem;
     display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.75rem;
     background: #fff;
     border: 1px solid hsl(var(--border));
     border-radius: var(--radius);
@@ -23,16 +24,17 @@
 }
 
 .stat-value {
-    font-size: 2rem;
+    font-size: 1.25rem;
     font-weight: 700;
     color: hsl(var(--primary));
 }
 
 .stat-label {
-    font-size: 0.75rem;
+    font-size: 0.65rem;
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 0.05em;
     color: hsl(var(--muted-foreground));
+    flex: 1;
 }
 
 .admin-table-container {
