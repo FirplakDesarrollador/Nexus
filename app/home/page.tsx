@@ -102,6 +102,15 @@ export default function HomePage() {
                         <p>Gestión de requerimientos, solicitudes de compra y panel administrativo.</p>
                     </Link>
 
+                    {/* Módulo Muestras Homologadas */}
+                    <Link href="/muestras" className="nav-card card">
+                        <div className="icon-wrapper">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1" ry="1"/><path d="M9 12h6"/><path d="M9 16h4"/></svg>
+                        </div>
+                        <h2>Muestras Homologadas</h2>
+                        <p>Registro y seguimiento del proceso de homologación de muestras de productos.</p>
+                    </Link>
+
                     {/* Módulo Bodega MP-08 (Placeholder) */}
                     <div className="nav-card card" style={{ opacity: 0.6, cursor: 'not-allowed' }}>
                         <div className="icon-wrapper" style={{ filter: 'grayscale(100%)' }}>
