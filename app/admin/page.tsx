@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation'
 import { 
     Search, Filter, Calendar, User as UserIcon, Building2, Package, 
     CreditCard, CheckCircle2, X, Eye, CheckCircle, XCircle, 
-    Truck, Wallet, Bell, AlertCircle, Clock, AlertTriangle, FileText
+    Truck, Wallet, Bell, AlertCircle, Clock, AlertTriangle, FileText,
+    Paperclip, Trash2, Download, Image as ImageIcon, TrendingUp, TrendingDown
 } from 'lucide-react'
 import './admin.css'
 
@@ -22,16 +23,81 @@ export default function AdminDashboard() {
     const [searchTerm, setSearchTerm] = useState('')
     const [comments, setComments] = useState<any[]>([])
     const [newComment, setNewComment] = useState('')
+    const [attachedFiles, setAttachedFiles] = useState<any[]>([])
+    const [isUploading, setIsUploading] = useState(false)
+    const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+    const [toastMessage, setToastMessage] = useState<{show: boolean, message: string, type: 'success' | 'error'}>({ show: false, message: '', type: 'success' })
+    const [fileToDelete, setFileToDelete] = useState<{id: string, path: string} | null>(null)
+    const [isDeleting, setIsDeleting] = useState(false)
+    const [showCierreModal, setShowCierreModal] = useState(false)
+    const [cierreForm, setCierreForm] = useState({ proveedor: '', valor_total_compra: '', cantidad_total: '', tipo_resultado: 'Saving' })
+    const [plannerTask, setPlannerTask] = useState<any | null>(null)
+    const [isLoadingPlanner, setIsLoadingPlanner] = useState(false)
+
+    const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+        setToastMessage({ show: true, message, type })
+        setTimeout(() => {
+            setToastMessage(prev => ({ ...prev, show: false }))
+        }, 3000)
+    }
+
+    const syncPlanner = async (action: 'comment' | 'file' | 'complete', payload?: any) => {
+        if (!plannerTask?.id) return;
+        try {
+            const res = await fetch('/api/planner/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ taskId: plannerTask.id, action, payload })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                console.error('Planner Sync Error Response:', data);
+                showToast(`Error sincronizando con Planner: ${data.error}`, 'error');
+            }
+        } catch (err: any) {
+            console.error('Error syncing planner fetch:', err);
+            showToast(`Error de conexión con Planner: ${err.message}`, 'error');
+        }
+    }
 
     const router = useRouter()
+
+    useEffect(() => {
+        if (!selectedRequest) {
+            setPlannerTask(null)
+            return
+        }
+        
+        const fetchPlannerTask = async () => {
+            setIsLoadingPlanner(true)
+            try {
+                // cache-busting timestamp included
+                const res = await fetch(`/api/planner?ticket=${selectedRequest.ticket}&_t=${Date.now()}`)
+                const data = await res.json()
+                if (data.found && data.task) {
+                    setPlannerTask(data.task)
+                } else {
+                    setPlannerTask(null)
+                }
+            } catch (err) {
+                console.error('Error fetching planner task', err)
+                setPlannerTask(null)
+            } finally {
+                setIsLoadingPlanner(false)
+            }
+        }
+
+        fetchPlannerTask()
+    }, [selectedRequest])
 
     useEffect(() => {
         const checkRole = async () => {
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) return window.location.href = '/login'
 
+            setCurrentUserId(user.id)
             const { data: profile } = await supabase.schema('nexus').from('users').select('rol').eq('id', user.id).single()
-            if (profile?.rol !== 'ADMIN') window.location.href = '/home'
+            if (profile?.rol !== 'ADMIN') window.location.href = '/compras'
         }
         checkRole()
         fetchData()
@@ -84,6 +150,99 @@ export default function AdminDashboard() {
         if (data) setComments(data)
     }
 
+    const fetchDocuments = async (requestId: string) => {
+        const { data } = await supabase.schema('nexus')
+            .from('documentos')
+            .select('*')
+            .eq('solicitud_id', requestId)
+            .order('created_at', { ascending: false })
+        if (data) setAttachedFiles(data)
+    }
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file || !selectedRequest) return
+
+        setIsUploading(true)
+        try {
+            const formData = new FormData()
+            formData.append('file', file)
+            formData.append('solicitudId', selectedRequest.id)
+            formData.append('ticket', selectedRequest.ticket)
+            if (currentUserId) formData.append('uploadedBy', currentUserId)
+
+            const response = await fetch('/api/upload', {
+                method: 'POST',
+                body: formData
+            })
+
+            const result = await response.json()
+
+            if (!response.ok) {
+                throw new Error(result.error || 'Error al subir archivo')
+            }
+
+            // Send storage path to backend — it generates the signed Supabase URL server-side
+            await syncPlanner('file', { path: result.path, filename: file.name })
+
+            await fetchDocuments(selectedRequest.id)
+            showToast('¡Archivo adjuntado correctamente!')
+        } catch (err: any) {
+            console.error('Error uploading file:', err)
+            showToast('Error al subir archivo: ' + err.message, 'error')
+        } finally {
+            setIsUploading(false)
+            // Reset the file input
+            e.target.value = ''
+        }
+    }
+
+    const handleDownloadFile = async (path: string, filename: string) => {
+        try {
+            const { data, error } = await supabase.storage
+                .from('solicitudes_documentos')
+                .download(path)
+            
+            if (error) throw error
+            
+            const url = URL.createObjectURL(data)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = filename
+            a.click()
+        } catch (err: any) {
+            showToast('Error al descargar: ' + err.message, 'error')
+        }
+    }
+
+    const handleDeleteFile = (id: string, path: string) => {
+        setFileToDelete({ id, path })
+    }
+
+    const confirmDeleteFile = async () => {
+        if (!fileToDelete) return
+        
+        setIsDeleting(true)
+        try {
+            const response = await fetch('/api/upload', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ documentId: fileToDelete.id, path: fileToDelete.path })
+            })
+
+            const result = await response.json()
+            if (!response.ok) throw new Error(result.error || 'Error al eliminar')
+
+            if (selectedRequest) await fetchDocuments(selectedRequest.id)
+            showToast('¡Archivo eliminado exitosamente!')
+        } catch (err: any) {
+            showToast('Error al eliminar: ' + err.message, 'error')
+        } finally {
+            setIsDeleting(false)
+            setFileToDelete(null)
+        }
+    }
+
     const handleUpdateStatus = async (id: string, newStatus: string, observation?: string) => {
         setIsSaving(true)
         try {
@@ -112,6 +271,9 @@ export default function AdminDashboard() {
                         actor_id: user?.id
                     })
                 if (histError) throw histError
+
+                // Sync with planner
+                await syncPlanner('comment', { comment: observation })
             }
 
             // 3. Refresh data
@@ -127,21 +289,53 @@ export default function AdminDashboard() {
         setIsSaving(false)
     }
 
-    const handleCloseRequest = async (id: string) => {
-        if (!confirm('¿Estás seguro de finalizar la gestión de esta solicitud? Se moverá al historial.')) return
+    const handleCloseRequest = () => {
+        setCierreForm({ proveedor: '', valor_total_compra: '', cantidad_total: '', tipo_resultado: 'Saving' })
+        setShowCierreModal(true)
+    }
 
+    const handleConfirmCierre = async () => {
+        if (!selectedRequest) return
+        if (!cierreForm.proveedor.trim() || !cierreForm.valor_total_compra || !cierreForm.cantidad_total) {
+            showToast('Completa todos los campos del cierre.', 'error')
+            return
+        }
         setIsSaving(true)
-        const { error } = await supabase.schema('nexus')
-            .from('solicitudes')
-            .update({
-                closed_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', id)
+        try {
+            const presupuesto = selectedRequest.presupuesto_estimado || 0
+            const valorCompra = parseFloat(cierreForm.valor_total_compra)
+            const tipo_resultado = cierreForm.tipo_resultado
 
-        if (!error) {
-            await fetchData()
+            // 1. Insertar cierre
+            const { error: cierreError } = await supabase.schema('nexus')
+                .from('cierres_compra')
+                .insert({
+                    solicitud_id: selectedRequest.id,
+                    proveedor: cierreForm.proveedor.trim(),
+                    valor_total_compra: valorCompra,
+                    cantidad_total: parseInt(cierreForm.cantidad_total),
+                    tipo_resultado,
+                    cerrado_por: currentUserId
+                })
+            if (cierreError) throw cierreError
+
+            // 2. Cerrar solicitud
+            const { error: closeError } = await supabase.schema('nexus')
+                .from('solicitudes')
+                .update({ closed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+                .eq('id', selectedRequest.id)
+            if (closeError) throw closeError
+
+            // 3. Close Planner task
+            await syncPlanner('complete')
+            setPlannerTask((prev: any) => prev ? { ...prev, percentComplete: 100 } : null)
+
+            showToast(`¡Gestión finalizada! Resultado: ${tipo_resultado}`)
+            setShowCierreModal(false)
             setSelectedRequest(null)
+            await fetchData()
+        } catch (err: any) {
+            showToast('Error al finalizar: ' + err.message, 'error')
         }
         setIsSaving(false)
     }
@@ -164,11 +358,152 @@ export default function AdminDashboard() {
     });
 
     return (
-        <div className="admin-container animate-fade-in">
-            <nav className="admin-nav" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '3rem' }}>
+        <>
+            {/* Custom Toast Notification */}
+            <div className={`toast-notification ${toastMessage.show ? 'show' : ''} ${toastMessage.type}`}>
+                {toastMessage.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+                <span>{toastMessage.message}</span>
+            </div>
+
+            {/* Delete Confirmation Modal */}
+            {fileToDelete && (
+                <div style={{ 
+                    position: 'fixed', 
+                    top: 0, left: 0, right: 0, bottom: 0, 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    background: 'rgba(0,0,0,0.85)', 
+                    zIndex: 9999,
+                    padding: '2rem'
+                }}>
+                    <div className="modal-content glass animate-slide-up" style={{ 
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '16px',
+                        maxWidth: '400px', 
+                        padding: '2rem', 
+                        textAlign: 'center',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '1rem',
+                        color: 'hsl(var(--foreground))'
+                    }}>
+                        <div style={{
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            color: '#ef4444',
+                            padding: '1rem',
+                            borderRadius: '50%',
+                            display: 'inline-flex',
+                            marginBottom: '0.5rem'
+                        }}>
+                            <AlertTriangle size={32} />
+                        </div>
+                        <h2 style={{ fontSize: '1.25rem', margin: 0 }}>¿Eliminar archivo?</h2>
+                        <p style={{ opacity: 0.7, fontSize: '0.9rem', margin: 0 }}>
+                            Esta acción no se puede deshacer y el archivo será eliminado permanentemente de la base de datos.
+                        </p>
+                        <div style={{ display: 'flex', gap: '1rem', width: '100%', marginTop: '1.5rem' }}>
+                            <button 
+                                className="action-btn" 
+                                style={{ flex: 1, background: 'rgba(255,255,255,0.05)', color: 'white' }}
+                                onClick={() => setFileToDelete(null)}
+                                disabled={isDeleting}
+                            >
+                                Cancelar
+                            </button>
+                            <button 
+                                className="action-btn" 
+                                style={{ flex: 1, background: '#ef4444', color: 'white', border: 'none' }}
+                                onClick={confirmDeleteFile}
+                                disabled={isDeleting}
+                            >
+                                {isDeleting ? 'Eliminando...' : 'Sí, eliminar'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal Cierre de Compra */}
+            {showCierreModal && selectedRequest && (() => {
+                const presupuesto = selectedRequest.presupuesto_estimado || 0
+                const valorCompra = parseFloat(cierreForm.valor_total_compra) || 0
+                const diferencia = presupuesto - valorCompra
+                const tipo = cierreForm.tipo_resultado
+                const hasValues = cierreForm.valor_total_compra !== ''
+                return (
+                    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.85)', zIndex: 9999, padding: '2rem' }}>
+                        <div className="modal-content glass animate-scale-in" style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', maxWidth: '480px', width: '100%', padding: '2rem', color: 'hsl(var(--foreground))', position: 'relative' }}>
+                            <button onClick={() => setShowCierreModal(false)} style={{ position: 'absolute', right: '1rem', top: '1rem', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.5 }}><X size={20} /></button>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                                <div style={{ background: 'rgba(16,185,129,0.1)', color: '#10b981', padding: '0.6rem', borderRadius: '50%', display: 'inline-flex' }}><CheckCircle2 size={24} /></div>
+                                <div>
+                                    <h2 style={{ margin: 0, fontSize: '1.1rem' }}>Finalizar Gestión</h2>
+                                    <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.5 }}>{selectedRequest.ticket} · {selectedRequest.titulo}</p>
+                                </div>
+                            </div>
+
+                            <div className="form-group" style={{ marginBottom: '1rem' }}>
+                                <label>Proveedor con el que se realizó la compra</label>
+                                <input type="text" className="form-control" placeholder="Ej: Proveedor S.A.S" value={cierreForm.proveedor} onChange={e => setCierreForm(p => ({ ...p, proveedor: e.target.value }))} />
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                                <div className="form-group">
+                                    <label>Valor total de la compra ($)</label>
+                                    <input type="number" className="form-control" placeholder="0" value={cierreForm.valor_total_compra} onChange={e => setCierreForm(p => ({ ...p, valor_total_compra: e.target.value }))} />
+                                </div>
+                                <div className="form-group">
+                                    <label>Cantidad total</label>
+                                    <input type="number" className="form-control" placeholder="0" value={cierreForm.cantidad_total} onChange={e => setCierreForm(p => ({ ...p, cantidad_total: e.target.value }))} />
+                                </div>
+                            </div>
+
+                            <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                                <label>Resultado de la Negociación</label>
+                                <select 
+                                    className="form-control" 
+                                    value={cierreForm.tipo_resultado} 
+                                    onChange={e => setCierreForm(p => ({ ...p, tipo_resultado: e.target.value }))}
+                                >
+                                    <option value="Saving">Saving (Ahorro vs Presupuesto)</option>
+                                    <option value="Avoidance">Avoidance (Prevención de alza / Mejor que mercado)</option>
+                                    <option value="Cost Overrun">Cost Overrun (Sobrecosto vs Presupuesto)</option>
+                                </select>
+                            </div>
+
+                            {hasValues && (
+                                <div style={{ background: tipo === 'Cost Overrun' ? 'rgba(239,68,68,0.08)' : tipo === 'Saving' ? 'rgba(16,185,129,0.08)' : 'rgba(245,158,11,0.08)', border: `1px solid ${tipo === 'Cost Overrun' ? '#ef4444' : tipo === 'Saving' ? '#10b981' : '#f59e0b'}`, borderRadius: '0.75rem', padding: '1rem', marginBottom: '1.5rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', opacity: 0.7, marginBottom: '0.5rem' }}>
+                                        <span>Presupuesto estimado</span><span>${presupuesto.toLocaleString()}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', opacity: 0.7, marginBottom: '0.75rem' }}>
+                                        <span>Valor real de compra</span><span>${valorCompra.toLocaleString()}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, color: tipo === 'Cost Overrun' ? '#ef4444' : tipo === 'Saving' ? '#10b981' : '#f59e0b' }}>
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                            {tipo === 'Saving' || tipo === 'Avoidance' ? <TrendingDown size={16} /> : <TrendingUp size={16} />}
+                                            {tipo}
+                                        </span>
+                                        <span>{diferencia >= 0 ? '+' : '-'}${Math.abs(diferencia).toLocaleString()}</span>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <button className="action-btn" style={{ flex: 1 }} onClick={() => setShowCierreModal(false)} disabled={isSaving}>Cancelar</button>
+                                <button className="action-btn" style={{ flex: 1, background: '#10b981', color: 'white', border: 'none', fontWeight: 600 }} onClick={handleConfirmCierre} disabled={isSaving}>{isSaving ? 'Guardando...' : 'Confirmar Cierre'}</button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            })()}
+
+            <div className="admin-container animate-fade-in">
+                <nav className="admin-nav" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '3rem' }}>
                 <div style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
-                    <img src="/logo.png" alt="Nexus" style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'white', border: '2px solid var(--glass-border)' }} />
-                    <a onClick={() => router.push('/home')} style={{ cursor: 'pointer' }}>Volver al Menú</a>
+                    <img src="/logo.png" alt="Nexus" style={{ width: '36px', height: '36px', borderRadius: '8px', background: '#f5f1ea', border: '1px solid rgba(116,144,148,0.3)', padding: '2px', objectFit: 'contain' }} />
+                    <a onClick={() => router.push('/compras')} style={{ cursor: 'pointer' }}>Volver al Menú</a>
                     <a onClick={() => router.push('/admin')} className="active" style={{ cursor: 'pointer' }}>Gestión</a>
                     <a onClick={() => router.push('/reports')} style={{ cursor: 'pointer' }}>Reportes</a>
                 </div>
@@ -211,19 +546,12 @@ export default function AdminDashboard() {
                     <span className="stat-value" style={{ color: '#ff4d4d' }}>{stats.urgent}</span>
                     <AlertTriangle size={20} style={{ color: '#ff4d4d' }} />
                 </div>
-                <div 
-                    className={`stat-card glass shadow-lg clickable ${filterType === 'ready-to-close' ? 'active' : ''}`}
-                    onClick={() => setFilterType(filterType === 'ready-to-close' ? 'all' : 'ready-to-close')}
-                >
-                    <span className="stat-label">Listas para Cierre</span>
-                    <span className="stat-value" style={{ color: '#10b981' }}>{stats.readyToClose}</span>
-                    <CheckCircle size={20} style={{ color: '#10b981' }} />
-                </div>
+
             </div>
 
             <div className="card glass">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '2rem', marginBottom: '3rem' }}>
-                    <img src="/logo.png" alt="Logo" style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'white', border: '2px solid var(--glass-border)' }} />
+                    <img src="/logo.png" alt="Logo" style={{ width: '44px', height: '44px', borderRadius: '8px', background: '#f5f1ea', border: '1px solid rgba(116,144,148,0.3)', padding: '2px', objectFit: 'contain' }} />
                     <h1 style={{ margin: 0 }}>Reportes de Gestión</h1>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem', alignItems: 'center' }}>
@@ -234,7 +562,7 @@ export default function AdminDashboard() {
                                 Filtrando por: {
                                     filterType === 'pending' ? 'Pendientes' : 
                                     filterType === 'in-progress' ? 'En Proceso' : 
-                                    filterType === 'urgent' ? 'Urgentes' : 'Listas para Cierre'
+                                    filterType === 'urgent' ? 'Urgentes' : ''
                                 }
                                 <X size={12} style={{ marginLeft: '0.5rem', cursor: 'pointer' }} onClick={() => setFilterType('all')} />
                             </span>
@@ -331,8 +659,8 @@ export default function AdminDashboard() {
                                                 onChange={(e) => handleUpdateStatus(req.id, e.target.value)}
                                             >
                                                 <option value="Revisión">Revisión</option>
-                                                <option value="En Cotización">En Cotización</option>
                                                 <option value="Aprobado">Aprobado</option>
+                                                <option value="En Cotización">En Cotización</option>
                                                 <option value="En Camino">En Camino</option>
                                                 <option value="Completada">Completada</option>
                                                 <option value="Rechazada">Rechazada</option>
@@ -344,6 +672,7 @@ export default function AdminDashboard() {
                                                 onClick={() => {
                                                     setSelectedRequest(req);
                                                     fetchComments(req.id);
+                                                    fetchDocuments(req.id);
                                                     setNewComment('');
                                                 }}
                                                 style={{ background: 'hsla(var(--primary), 0.1)', color: 'hsl(var(--primary))' }}
@@ -358,11 +687,30 @@ export default function AdminDashboard() {
                     </table>
                 </div>
             </div>
+            </div>
 
             {/* Modal de Gestión */}
             {selectedRequest && (
-                <div className="modal-overlay animate-fade-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 1000, padding: '2rem' }}>
-                    <div className="modal-content glass animate-scale-in" style={{ width: '100%', maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto', position: 'relative', padding: '2.5rem' }}>
+                <div style={{ 
+                    position: 'fixed', 
+                    top: 0, left: 0, right: 0, bottom: 0, 
+                    background: 'rgba(0,0,0,0.8)', 
+                    zIndex: 1000, 
+                    padding: '2rem 1rem',
+                    overflowY: 'auto',
+                    display: 'flex'
+                }}>
+                    <div className="modal-content glass animate-scale-in" style={{ 
+                        width: '100%',
+                        maxWidth: '1000px', 
+                        margin: 'auto',
+                        position: 'relative', 
+                        padding: '2.5rem',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+                        boxSizing: 'border-box',
+                        borderRadius: '16px'
+                    }}>
                         <button
                             className="close-btn"
                             onClick={() => setSelectedRequest(null)}
@@ -434,7 +782,59 @@ export default function AdminDashboard() {
                             </div>
                         </div>
 
-                        <div className="management-actions glass" style={{ padding: '1.5rem', border: '1px solid var(--glass-border)', borderRadius: '1rem' }}>
+                        {/* --- PLANNER TASK CARD --- */}
+                        <div className="glass" style={{
+                            marginTop: '2rem',
+                            padding: '1.5rem',
+                            border: '1px solid rgba(139, 92, 246, 0.3)',
+                            borderRadius: '1rem',
+                            background: 'rgba(139, 92, 246, 0.05)',
+                        }}>
+                            <h3 style={{ margin: '0 0 1rem 0', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#a78bfa' }}>
+                                <CheckCircle size={16} /> Tarea de Microsoft Planner
+                            </h3>
+                            
+                            {isLoadingPlanner ? (
+                                <div style={{ fontSize: '0.85rem', opacity: 0.6, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <Clock size={14} className="animate-spin" /> Buscando tarea asociada en Planner...
+                                </div>
+                            ) : plannerTask ? (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.25rem' }}>{plannerTask.title}</div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.8rem', opacity: 0.7 }}>
+                                            <span>Progreso: {plannerTask.percentComplete}%</span>
+                                            {plannerTask.priority === 1 && <span style={{ color: '#ef4444' }}>Urgente</span>}
+                                            {plannerTask.dueDateTime && <span>Vence: {new Date(plannerTask.dueDateTime).toLocaleDateString()}</span>}
+                                        </div>
+                                    </div>
+                                    <a 
+                                        href={plannerTask.url} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="action-btn"
+                                        style={{ background: '#8b5cf6', color: 'white', border: 'none', textDecoration: 'none', fontSize: '0.8rem', padding: '0.5rem 1rem' }}
+                                    >
+                                        Abrir en Planner
+                                    </a>
+                                </div>
+                            ) : (
+                                <div style={{ fontSize: '0.85rem', opacity: 0.6 }}>
+                                    No se encontró ninguna tarea en Planner para el ticket {selectedRequest.ticket}.
+                                </div>
+                            )}
+                        </div>
+                        {/* ----------------------- */}
+
+                        <div className="management-actions glass" style={{ 
+                            marginTop: '3rem', 
+                            padding: '2rem', 
+                            border: '1px solid hsla(var(--primary), 0.2)', 
+                            borderRadius: '1.5rem', 
+                            background: 'rgba(255,255,255,0.015)',
+                            boxShadow: 'inset 0 0 20px rgba(0,0,0,0.2)',
+                            boxSizing: 'border-box'
+                        }}>
                             <h3 style={{ marginTop: 0, marginBottom: '1.5rem', fontSize: '1rem' }}>Acciones de Gestión</h3>
 
                             <div className="form-group" style={{ marginBottom: '1.5rem' }}>
@@ -446,8 +846,8 @@ export default function AdminDashboard() {
                                     disabled={isSaving}
                                 >
                                     <option value="Revisión">Revisión</option>
-                                    <option value="En Cotización">En Cotización</option>
                                     <option value="Aprobado">Aprobado</option>
+                                    <option value="En Cotización">En Cotización</option>
                                     <option value="En Camino">En Camino</option>
                                     <option value="Completada">Completada</option>
                                     <option value="Rechazada">Rechazada</option>
@@ -471,6 +871,45 @@ export default function AdminDashboard() {
                                             </div>
                                         ))
                                     )}
+                                </div>
+
+                                <div className="attachments-section" style={{ marginBottom: '2rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                        <label style={{ margin: 0 }}>Archivos y Cotizaciones</label>
+                                        <label className="action-btn" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0, fontSize: '0.8rem' }}>
+                                            <Paperclip size={14} />
+                                            {isUploading ? 'Subiendo...' : 'Adjuntar Archivo'}
+                                            <input type="file" style={{ display: 'none' }} onChange={handleFileUpload} disabled={isUploading} />
+                                        </label>
+                                    </div>
+                                    
+                                    <div className="files-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
+                                        {attachedFiles.length === 0 ? (
+                                            <p style={{ gridColumn: '1/-1', textAlign: 'center', opacity: 0.5, fontSize: '0.8rem', padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '0.5rem', border: '1px dashed rgba(255,255,255,0.1)' }}>
+                                                No hay archivos adjuntos.
+                                            </p>
+                                        ) : (
+                                            attachedFiles.map(file => (
+                                                <div key={file.id} className="file-card glass" style={{ padding: '0.75rem', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                                    <div style={{ background: 'rgba(255,255,255,0.05)', padding: '0.5rem', borderRadius: '0.4rem' }}>
+                                                        {file.filename.match(/\.(jpg|jpeg|png|gif)$/i) ? <ImageIcon size={18} /> : <FileText size={18} />}
+                                                    </div>
+                                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                                        <div style={{ fontSize: '0.75rem', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.filename}</div>
+                                                        <div style={{ fontSize: '0.65rem', opacity: 0.5 }}>{new Date(file.created_at).toLocaleDateString()}</div>
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '0.25rem' }}>
+                                                        <button onClick={() => handleDownloadFile(file.path, file.filename)} style={{ padding: '0.25rem', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.7 }} title="Descargar">
+                                                            <Download size={14} />
+                                                        </button>
+                                                        <button onClick={() => handleDeleteFile(file.id, file.path)} style={{ padding: '0.25rem', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.7, color: '#ff4d4d' }} title="Eliminar">
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
                                 </div>
 
                                 <label>Nuevo Comentario / Observación</label>
@@ -511,7 +950,7 @@ export default function AdminDashboard() {
                                         fontSize: '0.8rem',
                                         padding: '0.5rem 1rem'
                                     }}
-                                    onClick={() => handleCloseRequest(selectedRequest.id)}
+                                    onClick={() => handleCloseRequest()}
                                     disabled={isSaving || selectedRequest.estado_actual === 'Revisión'}
                                 >
                                     Finalizar Gestión (Mover a Historial)
@@ -526,6 +965,6 @@ export default function AdminDashboard() {
                     </div>
                 </div>
             )}
-        </div>
+        </>
     )
 }

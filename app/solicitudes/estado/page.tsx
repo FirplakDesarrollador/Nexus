@@ -52,8 +52,8 @@ export default function RequestStatusPage() {
 
     return (
         <div className="list-container">
-            <Link href="/home" className="btn-primary" style={{ background: 'transparent', color: 'white', padding: '0.5rem 0' }}>
-                <ArrowLeft size={16} /> Volver al Inicio
+            <Link href="/compras" className="btn-back" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none', color: '#254153', fontWeight: 600, transition: 'opacity 0.2s' }}>
+                <ArrowLeft size={16} /> Volver al submenú
             </Link>
 
             <h1 style={{ marginTop: '2rem', marginBottom: '2rem' }}>Estado General de Compras</h1>
@@ -88,9 +88,16 @@ export default function RequestStatusPage() {
                             <div className="ticket-info">
                                 <span className="ticket-id">{req.ticket}</span>
                                 <span className="ticket-title">{req.titulo}</span>
-                                <span className="ticket-qty" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'hsl(var(--primary))' }}>
-                                    {req.cantidad} {req.unidad_medida || 'Unid.'}
-                                </span>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center', marginTop: '0.5rem' }}>
+                                    <span className="ticket-qty" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'hsl(var(--primary))' }}>
+                                        {req.cantidad} {req.unidad_medida || 'Unid.'}
+                                    </span>
+                                    {req.presupuesto_estimado != null && (
+                                        <span style={{ fontSize: '0.8rem', fontWeight: 500, color: '#254153', background: 'rgba(37, 65, 83, 0.05)', padding: '0.15rem 0.5rem', borderRadius: '4px' }}>
+                                            Presupuesto: ${new Intl.NumberFormat('es-CO', { minimumFractionDigits: 0 }).format(req.presupuesto_estimado)}
+                                        </span>
+                                    )}
+                                </div>
                                 <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', opacity: 0.8 }}>
                                     <strong>Solicitante:</strong> {(req.solicitante as any)?.nombre}
                                 </div>

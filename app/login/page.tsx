@@ -27,7 +27,12 @@ export default function LoginPage() {
             .eq('correo', emailStr.trim().toLowerCase())
             .single()
 
-        const adminEmails = ['aprendiz.desarrollo@firplak.com', 'nallely.lopera@firplak.com']
+        const adminEmails = [
+            'aprendiz.desarrollo@firplak.com', 
+            'nallely.lopera@firplak.com', 
+            'milton.rendon@firplak.com',
+            'alejandro.fernandez@firplak.com'
+        ]
         const assignedRole = adminEmails.includes(emailStr.trim().toLowerCase()) ? 'ADMIN' : 'SOLICITANTE'
 
         const { error: profileError } = await supabase.schema('nexus')

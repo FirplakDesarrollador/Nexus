@@ -6,29 +6,35 @@
 
 .stats-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 3rem;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
 }
 
 .stat-card {
-    padding: 1.5rem;
+    padding: 0.75rem 1rem;
     display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.75rem;
+    background: #fff;
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    box-shadow: 0 2px 8px rgba(37, 65, 83, 0.06);
 }
 
 .stat-value {
-    font-size: 2rem;
+    font-size: 1.25rem;
     font-weight: 700;
     color: hsl(var(--primary));
 }
 
 .stat-label {
-    font-size: 0.75rem;
+    font-size: 0.65rem;
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 0.05em;
     color: hsl(var(--muted-foreground));
+    flex: 1;
 }
 
 .admin-table-container {
@@ -42,24 +48,32 @@ table {
 
 th {
     text-align: left;
-    padding: 1rem;
+    padding: 0.875rem 1rem;
     font-size: 0.75rem;
     text-transform: uppercase;
+    letter-spacing: 0.05em;
     color: hsl(var(--muted-foreground));
-    border-bottom: 1px solid hsl(var(--border));
+    border-bottom: 2px solid hsl(var(--border));
+    background: hsl(var(--muted));
 }
 
 td {
-    padding: 1rem;
-    border-bottom: 1px solid hsla(var(--border), 0.5);
+    padding: 0.875rem 1rem;
+    border-bottom: 1px solid hsl(var(--border));
+    color: hsl(var(--foreground));
+}
+
+tr:hover td {
+    background: hsla(204, 38%, 24%, 0.03);
 }
 
 .admin-nav {
     display: flex;
     gap: 2rem;
     margin-bottom: 3rem;
-    border-bottom: 1px solid hsl(var(--border));
+    border-bottom: 2px solid hsl(var(--border));
     padding-bottom: 1rem;
+    align-items: center;
 }
 
 .admin-nav a {
@@ -67,37 +81,51 @@ td {
     color: hsl(var(--muted-foreground));
     font-weight: 500;
     transition: color 0.2s;
+    font-size: 0.9rem;
+}
+
+.admin-nav a:hover {
+    color: hsl(var(--primary));
 }
 
 .admin-nav a.active {
     color: hsl(var(--primary));
+    font-weight: 600;
+    border-bottom: 2px solid hsl(var(--primary));
+    padding-bottom: 0.25rem;
 }
 
 .action-btn {
     background: none;
     border: 1px solid hsl(var(--border));
-    padding: 0.25rem 0.5rem;
-    border-radius: 0.25rem;
-    color: white;
+    padding: 0.35rem 0.75rem;
+    border-radius: 0.375rem;
+    color: hsl(var(--foreground));
     cursor: pointer;
+    font-size: 0.8rem;
+    font-family: 'Outfit', sans-serif;
+    transition: all 0.2s;
 }
 
 .action-btn:hover {
-    background: hsla(var(--primary), 0.1);
+    background: hsla(204, 38%, 24%, 0.08);
     border-color: hsl(var(--primary));
+    color: hsl(var(--primary));
 }
 
-/* Modal and Detailed View Styles */
+/* Modal */
 .modal-overlay {
     backdrop-filter: blur(8px);
 }
 
 .detail-item label {
     font-weight: 600;
+    color: hsl(var(--muted-foreground));
 }
 
 .management-actions {
-    background: hsla(var(--background), 0.3);
+    background: hsla(204, 38%, 24%, 0.04);
+    border: 1px solid hsl(var(--border));
 }
 
 .form-group label {
@@ -110,20 +138,26 @@ td {
 
 .form-control {
     width: 100%;
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.9);
     border: 1px solid hsl(var(--border));
     border-radius: 0.5rem;
     padding: 0.75rem 1rem;
-    color: white;
+    color: hsl(var(--foreground));
     transition: all 0.2s ease;
-    font-family: inherit;
-    color-scheme: dark;
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.9rem;
 }
 
 .form-control:focus {
     outline: none;
     border-color: hsl(var(--primary));
-    box-shadow: 0 0 0 2px hsla(var(--primary), 0.2);
+    box-shadow: 0 0 0 3px hsla(204, 38%, 24%, 0.1);
+    background: #fff;
+}
+
+.form-control::placeholder {
+    color: hsl(var(--muted-foreground));
+    opacity: 0.6;
 }
 
 .badge {
@@ -134,24 +168,25 @@ td {
 }
 
 .badge-pending {
-    background: hsla(var(--primary), 0.1);
+    background: hsla(204, 38%, 24%, 0.08);
     color: hsl(var(--primary));
-    border: 1px solid hsla(var(--primary), 0.2);
+    border: 1px solid hsla(204, 38%, 24%, 0.2);
 }
 
 .badge-rejected {
-    background: hsla(var(--destructive), 0.1);
-    color: hsl(var(--destructive));
-    border: 1px solid hsla(var(--destructive), 0.2);
+    background: #ef444412;
+    color: #b91c1c;
+    border: 1px solid #ef444435;
 }
 
 .ticket-badge {
-    background: hsla(var(--primary), 0.2);
+    background: hsla(204, 38%, 24%, 0.1);
     color: hsl(var(--primary));
     padding: 0.5rem 1rem;
     border-radius: 99px;
     font-weight: 700;
-    border: 1px solid hsla(var(--primary), 0.3);
+    border: 1px solid hsla(204, 38%, 24%, 0.2);
+    font-size: 0.875rem;
 }
 
 @keyframes scaleIn {
@@ -174,17 +209,61 @@ td {
 .stat-card.clickable {
     cursor: pointer;
     transition: all 0.2s ease;
-    border: 1px solid transparent;
+    border: 1px solid hsl(var(--border));
 }
 
 .stat-card.clickable:hover {
-    transform: translateY(-5px);
-    background: rgba(255, 255, 255, 0.05);
-    border-color: hsla(var(--primary), 0.3);
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(37, 65, 83, 0.12);
+    border-color: hsla(204, 38%, 24%, 0.3);
 }
 
 .stat-card.clickable.active {
-    background: hsla(var(--primary), 0.1);
+    background: hsla(204, 38%, 24%, 0.06);
     border-color: hsl(var(--primary));
-    box-shadow: 0 0 20px -10px hsl(var(--primary));
-}
+    box-shadow: 0 0 0 2px hsla(204, 38%, 24%, 0.15);
+}
+
+/* Toast Notification Styles */
+.toast-notification {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px) scale(0.9);
+    background: rgba(255, 255, 255, 0.95);
+    color: #1a1a2e;
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255,255,255,0.2) inset;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    z-index: 9999;
+    opacity: 0;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    pointer-events: none;
+    backdrop-filter: blur(10px);
+}
+
+.toast-notification.show {
+    transform: translateX(-50%) translateY(0) scale(1);
+    opacity: 1;
+}
+
+.toast-notification.success {
+    border-top: 4px solid #10b981;
+}
+
+.toast-notification.success svg {
+    color: #10b981;
+}
+
+.toast-notification.error {
+    border-top: 4px solid #ef4444;
+}
+
+.toast-notification.error svg {
+    color: #ef4444;
+}
