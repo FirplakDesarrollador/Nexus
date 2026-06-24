@@ -314,6 +314,7 @@ export default function NuevaMuestraPage() {
                                 />
                             </div>
 
+
                             <div className="form-group">
                                 <label>Categoría <span className="required">*</span></label>
                                 <select
