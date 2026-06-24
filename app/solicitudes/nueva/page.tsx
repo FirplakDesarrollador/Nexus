@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { createClient, createTHClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Send, Package, Truck, Shield, Users, CreditCard, CheckCircle2, X, Search, ChevronDown, Bell, AlertTriangle, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Send, Package, Truck, Shield, Users, CreditCard, CheckCircle2, X, Search, ChevronDown, Bell, AlertTriangle, AlertCircle, Info } from 'lucide-react'
 import Link from 'next/link'
 import './request.css'
 
@@ -167,7 +167,8 @@ export default function NewRequestPage() {
         cost_center_id: '',
         account_id: '',
         estimated_budget: '',
-        approver_email: ''
+        approver_email: '',
+        observaciones: ''
     })
 
     useEffect(() => {
@@ -248,7 +249,8 @@ export default function NewRequestPage() {
                 presupuesto_estimado: form.estimated_budget ? parseFloat(form.estimated_budget) : null,
                 unidad_medida: form.unit,
                 estado_actual: 'Revisión',
-                aprobador_email: form.approver_email || null
+                aprobador_email: form.approver_email || null,
+                observaciones: form.observaciones || null
             })
 
             if (error) throw error
@@ -354,6 +356,26 @@ export default function NewRequestPage() {
                                     <option value="SI">SI</option>
                                     <option value="NA">N/A</option>
                                 </select>
+                            </div>
+                        </div>
+                        <div className="form-grid single" style={{ marginTop: '1rem' }}>
+                            <div className="form-group">
+                                <label className="label-with-info">
+                                    Observaciones
+                                    <span className="info-tooltip-wrapper">
+                                        <Info size={15} className="info-icon" />
+                                        <span className="info-tooltip-text">
+                                            Aquí podrás dejar links de compra, observaciones importantes que requieres con ese proveedor
+                                        </span>
+                                    </span>
+                                </label>
+                                <input
+                                    type="text"
+                                    className="form-control"
+                                    placeholder="Links de compra u observaciones del proveedor..."
+                                    value={form.observaciones}
+                                    onChange={e => setForm({ ...form, observaciones: e.target.value })}
+                                />
                             </div>
                         </div>
                     </section>
