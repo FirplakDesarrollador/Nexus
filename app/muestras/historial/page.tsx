@@ -12,12 +12,11 @@ import '../../home/home.css'
 import '../mis-muestras/muestras-list.css'
 
 
-const ESTADOS = ['Todos', 'Pendiente', 'En Revisión', 'En Prueba', 'Aprobada', 'Rechazada']
+const ESTADOS = ['Todos', 'Pendiente', 'En Prueba', 'Aprobada', 'Rechazada']
 
 function EstadoBadge({ estado }: { estado: string }) {
     const map: Record<string, string> = {
         'Pendiente': 'badge-pending',
-        'En Revisión': 'badge-in-progress',
         'En Prueba': 'badge-in-progress',
         'Aprobada': 'badge-approved',
         'Rechazada': 'badge-rejected'
@@ -57,7 +56,7 @@ export default function HistorialMuestrasPage() {
             .from('muestras')
             .select(`
                 *,
-                muestra_estados_hist(estado, observacion, created_at),
+                muestra_estados_hist(estado, observacion, evidencia_url, aprobador_nombre, aprobador_email, created_at),
                 solicitante:solicitante_id(nombre, email)
             `)
             .order('created_at', { ascending: false })
@@ -131,7 +130,7 @@ export default function HistorialMuestrasPage() {
                     <span className="stat-num">{muestras.length}</span>
                     <span className="stat-label">Total</span>
                 </div>
-                {['Pendiente', 'En Revisión', 'En Prueba', 'Aprobada', 'Rechazada'].map(e => (
+                {['Pendiente', 'En Prueba', 'Aprobada', 'Rechazada'].map(e => (
                     <div key={e} className="stat-pill">
                         <span className="stat-num">{muestras.filter(m => m.estado === e).length}</span>
                         <span className="stat-label">{e}</span>
@@ -216,9 +215,21 @@ export default function HistorialMuestrasPage() {
                                                         <div key={idx} className="hist-item">
                                                             <div className="hist-dot" />
                                                             <div>
-                                                                <EstadoBadge estado={h.estado} />
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                                                    <EstadoBadge estado={h.estado} />
+                                                                    {h.aprobador_nombre && (h.estado === 'Aprobada' || h.estado === 'Rechazada') && (
+                                                                        <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))' }}>
+                                                                            por {h.aprobador_nombre}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
                                                                 {h.observacion && <p>{h.observacion}</p>}
                                                                 <span>{new Date(h.created_at).toLocaleString('es-CO')}</span>
+                                                                {h.evidencia_url && (
+                                                                    <a href={h.evidencia_url} target="_blank" rel="noopener noreferrer" className="doc-link" style={{ marginTop: '0.3rem', width: 'fit-content' }}>
+                                                                        <FileText size={12} /> Ver evidencia <ExternalLink size={11} />
+                                                                    </a>
+                                                                )}
                                                             </div>
                                                         </div>
                                                     ))}
@@ -272,7 +283,7 @@ function AdminPanel({ muestra, userId, supabase, onRefresh }: any) {
                     onChange={e => setNuevoEstado(e.target.value)}
                     style={{ maxWidth: 200 }}
                 >
-                    {['Pendiente', 'En Revisión', 'En Prueba', 'Aprobada', 'Rechazada'].map(e => (
+                    {['Pendiente', 'En Prueba', 'Aprobada', 'Rechazada'].map(e => (
                         <option key={e} value={e}>{e}</option>
                     ))}
                 </select>

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Nexus | Gestión de Compras",
+  title: "Nexus | Gestión Área de Negociación",
   description: "Sistema premium de gestión de solicitudes de compra y proveedores.",
 };
 
