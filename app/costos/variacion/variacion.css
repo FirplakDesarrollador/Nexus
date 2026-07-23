@@ -1,0 +1,75 @@
+/* ─── Searchable select (selector de ítem con búsqueda) ─── */
+.searchable-select { position: relative; width: 100%; }
+.select-trigger {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.4rem 0.6rem;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.5rem;
+    color: hsl(var(--foreground));
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    gap: 0.5rem;
+}
+.select-trigger:hover, .select-trigger.active {
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsla(204, 38%, 24%, 0.1);
+}
+.select-trigger .placeholder { color: hsl(var(--muted-foreground)); }
+.select-trigger .trigger-actions { display: flex; align-items: center; gap: 0.3rem; flex-shrink: 0; }
+.select-trigger .clear-btn {
+    color: hsl(var(--muted-foreground));
+    display: flex;
+    border-radius: 50%;
+    transition: all 0.15s;
+}
+.select-trigger .clear-btn:hover { color: #ef4444; background: rgba(239,68,68,0.1); }
+.select-trigger .arrow { transition: transform 0.2s ease; color: hsl(var(--muted-foreground)); }
+.select-trigger .arrow.open { transform: rotate(180deg); }
+.select-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 25px -5px rgba(37, 65, 83, 0.15);
+    z-index: 100;
+    padding: 0.5rem;
+    max-height: 280px;
+    display: flex;
+    flex-direction: column;
+}
+.search-box {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.6rem;
+    border-bottom: 1px solid hsl(var(--border));
+    margin-bottom: 0.4rem;
+    color: hsl(var(--muted-foreground));
+}
+.search-input {
+    border: none;
+    background: transparent;
+    outline: none;
+    width: 100%;
+    font-size: 0.85rem;
+    color: hsl(var(--foreground));
+}
+.options-list { overflow-y: auto; max-height: 220px; }
+.option-item {
+    padding: 0.55rem 0.7rem;
+    font-size: 0.85rem;
+    color: hsl(var(--foreground));
+    border-radius: 0.25rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.option-item:hover { background: hsla(204, 38%, 24%, 0.06); }
+.option-item.selected { background: hsl(var(--primary)); color: #f5f1ea; }
+.no-results { padding: 0.65rem; font-size: 0.85rem; color: hsl(var(--muted-foreground)); text-align: center; }

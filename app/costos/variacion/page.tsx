@@ -1,15 +1,17 @@
 'use client'
 
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
     ArrowLeft, TrendingUp, TrendingDown, RefreshCw, DollarSign,
-    PackageSearch, AlertCircle, AlertTriangle, Loader2, ChevronDown, ChevronUp
+    PackageSearch, AlertCircle, AlertTriangle, Loader2, ChevronDown, ChevronUp,
+    Search, X
 } from 'lucide-react'
 import '../../home/home.css'
 import '../../admin/admin.css'
+import './variacion.css'
 import {
     LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
     XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
@@ -70,6 +72,79 @@ function impactoDe(r: VariacionRow): number {
     if (r.total_linea !== null && r.total_linea !== undefined) return r.total_linea
     if (r.diferencia_precios !== null && r.cantidad !== null) return r.diferencia_precios * r.cantidad
     return 0
+}
+
+function ItemSearchSelect({ options, value, onChange, placeholder }: {
+    options: [string, string][]
+    value: string
+    onChange: (val: string) => void
+    placeholder: string
+}) {
+    const [isOpen, setIsOpen] = useState(false)
+    const [searchTerm, setSearchTerm] = useState('')
+    const containerRef = useRef<HTMLDivElement>(null)
+
+    const selected = options.find(([cod]) => cod === value)
+    const filtered = options.filter(([, nombre]) => nombre.toLowerCase().includes(searchTerm.toLowerCase()))
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (containerRef.current && !containerRef.current.contains(event.target as Node)) setIsOpen(false)
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [])
+
+    return (
+        <div className="searchable-select" ref={containerRef} style={{ maxWidth: 260 }}>
+            <div className={`select-trigger ${isOpen ? 'active' : ''}`} onClick={() => setIsOpen(!isOpen)}>
+                {selected ? (
+                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{selected[1]}</span>
+                ) : (
+                    <span className="placeholder">{placeholder}</span>
+                )}
+                <div className="trigger-actions">
+                    {value && (
+                        <span className="clear-btn" onClick={e => { e.stopPropagation(); onChange(''); setSearchTerm('') }}>
+                            <X size={14} />
+                        </span>
+                    )}
+                    <ChevronDown size={14} className={`arrow ${isOpen ? 'open' : ''}`} />
+                </div>
+            </div>
+            {isOpen && (
+                <div className="select-dropdown animate-fade-in">
+                    <div className="search-box">
+                        <Search size={14} />
+                        <input
+                            type="text"
+                            className="search-input"
+                            placeholder="Buscar ítem..."
+                            autoFocus
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            onClick={e => e.stopPropagation()}
+                        />
+                    </div>
+                    <div className="options-list">
+                        {filtered.length > 0 ? (
+                            filtered.map(([cod, nombre]) => (
+                                <div
+                                    key={cod}
+                                    className={`option-item ${cod === value ? 'selected' : ''}`}
+                                    onClick={() => { onChange(cod); setIsOpen(false); setSearchTerm('') }}
+                                >
+                                    {nombre}
+                                </div>
+                            ))
+                        ) : (
+                            <div className="no-results">No se encontraron resultados</div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    )
 }
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -367,9 +442,12 @@ export default function VariacionCostosPage() {
                 <div style={sectionStyle}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                         <h3 style={{ margin: 0, fontSize: '0.9rem' }}>Evolución de Precio por Ítem</h3>
-                        <select className="form-control" style={{ width: 'auto', fontSize: '0.8rem', padding: '0.4rem 0.6rem' }} value={defaultItem} onChange={e => setSelectedItem(e.target.value)}>
-                            {itemsUnicos.map(([cod, nombre]) => <option key={cod} value={cod}>{nombre}</option>)}
-                        </select>
+                        <ItemSearchSelect
+                            options={itemsUnicos}
+                            value={defaultItem}
+                            onChange={setSelectedItem}
+                            placeholder="Buscar ítem..."
+                        />
                     </div>
                     {loading || evolucionItem.length === 0 ? (
                         <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: '0.85rem' }}>Sin datos para este ítem</div>
