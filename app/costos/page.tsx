@@ -41,13 +41,13 @@ export default function CostosMenuPage() {
                 </div>
                 
                 <div className="cards-grid">
-                    <div className="nav-card card" style={{ opacity: 0.6, cursor: 'not-allowed' }}>
-                        <div className="icon-wrapper" style={{ filter: 'grayscale(100%)' }}>
+                    <Link href="/costos/variacion" className="nav-card card">
+                        <div className="icon-wrapper">
                             <TrendingUp size={32} />
                         </div>
                         <h2>Variación de costos</h2>
-                        <p>Próximamente. Seguimiento detallado a la fluctuación de precios de materias primas.</p>
-                    </div>
+                        <p>Seguimiento detallado a la fluctuación de precios de materias primas.</p>
+                    </Link>
 
                     <div className="nav-card card" style={{ opacity: 0.6, cursor: 'not-allowed' }}>
                         <div className="icon-wrapper" style={{ filter: 'grayscale(100%)' }}>

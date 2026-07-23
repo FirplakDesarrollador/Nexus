@@ -101,7 +101,7 @@ export default function LoginPage() {
     }
 
     const titles = {
-        login: 'Gestión de Compras Corporativas',
+        login: 'Gestión Área de Negociación',
         register: 'Crea tu cuenta de acceso',
         forgot: 'Recuperar Contraseña'
     }

@@ -1,0 +1,539 @@
+'use client'
+
+import { Fragment, useEffect, useMemo, useState } from 'react'
+import { createClient } from '@/lib/supabase'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import {
+    ArrowLeft, TrendingUp, TrendingDown, RefreshCw, DollarSign,
+    PackageSearch, AlertCircle, AlertTriangle, Loader2, ChevronDown, ChevronUp
+} from 'lucide-react'
+import '../../home/home.css'
+import '../../admin/admin.css'
+import {
+    LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
+    XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+} from 'recharts'
+
+interface VariacionRow {
+    id: string
+    fecha_correo: string | null
+    tipo_documento: string | null
+    numero_documento: string | null
+    fecha_contabilizacion: string | null
+    cod_proveedor: string | null
+    descripcion_proveedor: string | null
+    cod_item: string | null
+    descripcion_item: string | null
+    precio: number | null
+    precio_prom_almacen: number | null
+    diferencia_precios: number | null
+    porc_variacion: number | null
+    penultimo_precio_prov: number | null
+    dif_vs_penultimo_precio: number | null
+    porc_vs_penultimo: number | null
+    cantidad: number | null
+    total_linea: number | null
+    precio_lista_precios: number | null
+    numero_lista_precio: string | null
+    obs_nl: string | null
+    responsable: string | null
+    estado: string | null
+    avoidance_ahorro: number | null
+    si_no: string | null
+    synced_at: string | null
+    revisiones_en_proceso: number | null
+}
+
+const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#14b8a6', '#f97316']
+const PAGE_SIZE = 50
+const ORIGEN_COLOR: Record<string, string> = { Nacional: '#10b981', Exterior: '#6366f1' }
+const ESTANCADO_UMBRAL = 3
+
+const fmt = (n: number | null | undefined) => n === null || n === undefined ? '—' : `$${Math.round(n).toLocaleString('es-CO')}`
+const fmtPct = (n: number | null | undefined) => n === null || n === undefined ? '—' : `${(n * 100).toFixed(1)}%`
+
+function esTablero(descripcion: string | null): boolean {
+    return !!descripcion && descripcion.toUpperCase().includes('TABLERO')
+}
+
+function origenProveedor(codProveedor: string | null): 'Nacional' | 'Exterior' | null {
+    if (!codProveedor) return null
+    if (codProveedor.startsWith('PN')) return 'Nacional'
+    if (codProveedor.startsWith('PE')) return 'Exterior'
+    return null
+}
+
+// Impacto económico real de la línea (Precio × Cantidad) — el criterio de priorización
+// más importante según el negocio, por encima del % de variación.
+function impactoDe(r: VariacionRow): number {
+    if (r.total_linea !== null && r.total_linea !== undefined) return r.total_linea
+    if (r.diferencia_precios !== null && r.cantidad !== null) return r.diferencia_precios * r.cantidad
+    return 0
+}
+
+const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+        return (
+            <div style={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '0.5rem', padding: '0.75rem 1rem', fontSize: '0.8rem' }}>
+                <p style={{ margin: '0 0 0.4rem', fontWeight: 600 }}>{label}</p>
+                {payload.map((p: any, i: number) => (
+                    <p key={i} style={{ margin: '0.15rem 0', color: p.color }}>{p.name}: {typeof p.value === 'number' ? fmt(p.value) : p.value}</p>
+                ))}
+            </div>
+        )
+    }
+    return null
+}
+
+export default function VariacionCostosPage() {
+    const supabase = createClient()
+    const router = useRouter()
+
+    const [user, setUser] = useState<any>(null)
+    const [isAdmin, setIsAdmin] = useState<boolean | null>(null)
+    const [rows, setRows] = useState<VariacionRow[]>([])
+    const [loading, setLoading] = useState(true)
+    const [syncing, setSyncing] = useState(false)
+    const [syncMsg, setSyncMsg] = useState<string | null>(null)
+    const [expandedId, setExpandedId] = useState<string | null>(null)
+    const [page, setPage] = useState(1)
+
+    const [vista, setVista] = useState<'activos' | 'todo'>('activos')
+    const [fProveedor, setFProveedor] = useState('')
+    const [fItem, setFItem] = useState('')
+    const [fEstado, setFEstado] = useState('')
+    const [fDesde, setFDesde] = useState('')
+    const [fHasta, setFHasta] = useState('')
+    const [selectedItem, setSelectedItem] = useState('')
+
+    useEffect(() => {
+        const init = async () => {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) { router.push('/login'); return }
+            setUser(user)
+            const { data: profile } = await supabase.schema('nexus').from('users').select('rol').eq('id', user.id).single()
+            setIsAdmin(profile?.rol === 'ADMIN')
+        }
+        init()
+    }, [supabase, router])
+
+    const fetchRows = async () => {
+        setLoading(true)
+        const { data } = await supabase.schema('nexus').from('variacion_costos').select('*').order('fecha_correo', { ascending: false })
+        if (data) setRows(data as VariacionRow[])
+        setLoading(false)
+    }
+
+    useEffect(() => {
+        if (isAdmin === true) fetchRows()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isAdmin])
+
+    useEffect(() => { setPage(1) }, [vista, fProveedor, fEstado, fItem, fDesde, fHasta])
+
+    const handleSync = async () => {
+        setSyncing(true)
+        setSyncMsg(null)
+        try {
+            const { data: { session } } = await supabase.auth.getSession()
+            const res = await fetch('/api/costos/variacion-sync', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${session?.access_token}` }
+            })
+            const json = await res.json()
+            if (!res.ok) throw new Error(json.error || 'Error al sincronizar')
+            setSyncMsg(`Sincronizado correctamente: ${json.rows} filas`)
+            await fetchRows()
+        } catch (err: any) {
+            setSyncMsg(`Error: ${err.message}`)
+        } finally {
+            setSyncing(false)
+        }
+    }
+
+    const excluidosFinalizado = useMemo(() => rows.filter(r => r.estado === 'Finalizado').length, [rows])
+    const excluidosNoAplica = useMemo(() => rows.filter(r => r.estado === 'No aplica').length, [rows])
+
+    const proveedores = useMemo(() => {
+        const map = new Map<string, string>()
+        rows.forEach(r => { if (r.cod_proveedor) map.set(r.cod_proveedor, r.descripcion_proveedor || r.cod_proveedor) })
+        return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]))
+    }, [rows])
+
+    const estados = useMemo(() => {
+        const set = new Set<string>()
+        rows.forEach(r => { if (r.estado) set.add(r.estado) })
+        return Array.from(set).sort()
+    }, [rows])
+
+    const itemsUnicos = useMemo(() => {
+        const map = new Map<string, string>()
+        rows.forEach(r => { if (r.cod_item) map.set(r.cod_item, r.descripcion_item || r.cod_item) })
+        return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]))
+    }, [rows])
+
+    const filtered = useMemo(() => {
+        return rows.filter(r => {
+            if (vista === 'activos' && !(!r.estado || r.estado === 'En proceso')) return false
+            if (fProveedor && r.cod_proveedor !== fProveedor) return false
+            if (fEstado && r.estado !== fEstado) return false
+            if (fItem && !`${r.cod_item ?? ''} ${r.descripcion_item ?? ''}`.toLowerCase().includes(fItem.toLowerCase())) return false
+            if (fDesde && (!r.fecha_correo || r.fecha_correo < fDesde)) return false
+            if (fHasta && (!r.fecha_correo || r.fecha_correo > fHasta)) return false
+            return true
+        })
+    }, [rows, vista, fProveedor, fEstado, fItem, fDesde, fHasta])
+
+    const totalRegistros = filtered.length
+    // Variación real: frente al penúltimo precio del MISMO proveedor cuando existe
+    // (más confiable que la variación general, que puede mezclar distintos proveedores).
+    const variacionesReales = filtered.map(r => r.porc_vs_penultimo ?? r.porc_variacion).filter((v): v is number => v !== null && v !== undefined)
+    const promedioVariacion = variacionesReales.length ? variacionesReales.reduce((a, b) => a + b, 0) / variacionesReales.length : 0
+    const incrementos = filtered.filter(r => (r.porc_variacion ?? 0) > 0).length
+    const decrementos = filtered.filter(r => (r.porc_variacion ?? 0) < 0).length
+    const impactoTotal = filtered.reduce((acc, r) => acc + impactoDe(r), 0)
+    const enSeguimientoEstancado = filtered.filter(r => r.estado === 'En proceso' && (r.revisiones_en_proceso || 0) >= ESTANCADO_UMBRAL).length
+    const ultimaSync = rows.reduce<string | null>((max, r) => (r.synced_at && (!max || r.synced_at > max)) ? r.synced_at : max, null)
+
+    const defaultItem = useMemo(() => {
+        if (selectedItem) return selectedItem
+        const top = [...filtered].filter(r => r.cod_item).sort((a, b) => impactoDe(b) - impactoDe(a))[0]
+        return top?.cod_item || ''
+    }, [filtered, selectedItem])
+
+    const evolucionItem = useMemo(() => {
+        return filtered
+            .filter(r => r.cod_item === defaultItem && r.fecha_correo)
+            .sort((a, b) => (a.fecha_correo || '').localeCompare(b.fecha_correo || ''))
+            .map(r => ({
+                fecha: r.fecha_correo ? new Date(r.fecha_correo).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: '2-digit' }) : '',
+                Precio: r.precio || 0,
+                'Precio Prom. Almacén': r.precio_prom_almacen || 0,
+            }))
+    }, [filtered, defaultItem])
+
+    // Priorización por impacto económico (Total Línea), no por % de variación promedio.
+    const topProveedoresImpacto = useMemo(() => {
+        const map = new Map<string, number>()
+        filtered.forEach(r => {
+            if (!r.cod_proveedor) return
+            const key = r.descripcion_proveedor || r.cod_proveedor
+            map.set(key, (map.get(key) || 0) + impactoDe(r))
+        })
+        return Array.from(map.entries())
+            .map(([proveedor, impacto]) => ({ proveedor, Impacto: Math.round(impacto) }))
+            .sort((a, b) => b.Impacto - a.Impacto)
+            .slice(0, 8)
+    }, [filtered])
+
+    const topMaterialesImpacto = useMemo(() => {
+        const map = new Map<string, number>()
+        filtered.forEach(r => {
+            if (!r.cod_item) return
+            const key = r.descripcion_item || r.cod_item
+            map.set(key, (map.get(key) || 0) + impactoDe(r))
+        })
+        return Array.from(map.entries())
+            .map(([material, impacto]) => ({ material, Impacto: Math.round(impacto) }))
+            .sort((a, b) => b.Impacto - a.Impacto)
+            .slice(0, 8)
+    }, [filtered])
+
+    const distribucionEstado = useMemo(() => {
+        const map = new Map<string, number>()
+        filtered.forEach(r => {
+            const key = r.estado || 'Sin estado'
+            map.set(key, (map.get(key) || 0) + 1)
+        })
+        return Array.from(map.entries()).map(([name, value]) => ({ name, value }))
+    }, [filtered])
+
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+    const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
+    const sectionStyle = { background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '1rem', padding: '1.5rem' }
+
+    if (isAdmin === null || !user) {
+        return <div className="home-container"><p>Cargando...</p></div>
+    }
+
+    if (isAdmin === false) {
+        return (
+            <div className="home-container">
+                <div style={{ ...sectionStyle, textAlign: 'center', marginTop: '3rem', maxWidth: 420, marginInline: 'auto' }}>
+                    <AlertCircle size={32} color="#ef4444" style={{ marginBottom: '0.5rem' }} />
+                    <h2 style={{ margin: 0 }}>Acceso restringido</h2>
+                    <p style={{ opacity: 0.7 }}>Este submódulo está disponible solo para administradores.</p>
+                    <Link href="/costos" className="btn-primary" style={{ display: 'inline-flex', marginTop: '1rem' }}>Volver</Link>
+                </div>
+            </div>
+        )
+    }
+
+    return (
+        <div className="admin-container animate-fade-in">
+            <Link href="/costos" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: 'hsl(var(--muted-foreground))', textDecoration: 'none', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
+                <ArrowLeft size={16} /> Volver a Módulo de Costos
+            </Link>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+                <div>
+                    <h1 style={{ margin: 0, fontSize: '1.4rem' }}>Variación de Costos</h1>
+                    <p style={{ margin: 0, fontSize: '0.8rem', color: 'hsl(var(--muted-foreground))' }}>
+                        Seguimiento a la fluctuación de precios de materias primas
+                        {ultimaSync && <> · Última actualización: {new Date(ultimaSync).toLocaleString('es-CO')}</>}
+                    </p>
+                </div>
+                <button className="action-btn" onClick={handleSync} disabled={syncing} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                    {syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                    {syncing ? 'Actualizando...' : 'Actualizar ahora'}
+                </button>
+            </div>
+
+            {syncMsg && (
+                <div style={{ marginBottom: '1rem', fontSize: '0.85rem', color: syncMsg.startsWith('Error') ? '#ef4444' : '#10b981' }}>{syncMsg}</div>
+            )}
+
+            {/* ── Toggle de vista ── */}
+            <div style={{ display: 'inline-flex', gap: '0.5rem', marginBottom: '1.25rem' }}>
+                <button
+                    className="action-btn"
+                    onClick={() => setVista('activos')}
+                    style={vista === 'activos' ? { background: 'hsl(var(--primary))', color: '#f5f1ea', borderColor: 'hsl(var(--primary))' } : {}}
+                >
+                    Activos (vacío / En proceso)
+                </button>
+                <button
+                    className="action-btn"
+                    onClick={() => setVista('todo')}
+                    style={vista === 'todo' ? { background: 'hsl(var(--primary))', color: '#f5f1ea', borderColor: 'hsl(var(--primary))' } : {}}
+                >
+                    Todo el histórico
+                </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                {[
+                    { icon: <PackageSearch size={16} style={{ opacity: 0.5 }} />, label: 'Registros (vista actual)', value: totalRegistros.toLocaleString('es-CO') },
+                    { icon: <DollarSign size={16} style={{ opacity: 0.5 }} />, label: 'Impacto Económico Total', value: fmt(impactoTotal) },
+                    { icon: promedioVariacion >= 0 ? <TrendingUp size={16} color="#ef4444" /> : <TrendingDown size={16} color="#10b981" />, label: 'Variación vs. Mismo Proveedor', value: fmtPct(promedioVariacion), color: promedioVariacion >= 0 ? '#ef4444' : '#10b981' },
+                    { icon: <TrendingUp size={16} color="#ef4444" />, label: 'Incrementos', value: incrementos.toLocaleString('es-CO'), color: '#ef4444' },
+                    { icon: <TrendingDown size={16} color="#10b981" />, label: 'Decrementos', value: decrementos.toLocaleString('es-CO'), color: '#10b981' },
+                    { icon: <AlertTriangle size={16} color="#f59e0b" />, label: 'Excluidos Finalizado', value: excluidosFinalizado.toLocaleString('es-CO') },
+                    { icon: <AlertTriangle size={16} color="#f59e0b" />, label: 'Excluidos No Aplica', value: excluidosNoAplica.toLocaleString('es-CO') },
+                    { icon: <AlertTriangle size={16} color="#ef4444" />, label: 'Posible Estancamiento', value: enSeguimientoEstancado.toLocaleString('es-CO'), color: enSeguimientoEstancado > 0 ? '#ef4444' : undefined },
+                ].map((k, i) => (
+                    <div key={i} className="stat-card card">
+                        {k.icon}
+                        <div style={{ flex: 1 }}>
+                            <div className="stat-label">{k.label}</div>
+                            <div className="stat-value" style={{ fontSize: '1.05rem', color: k.color }}>{k.value}</div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            <div style={{ ...sectionStyle, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                <div>
+                    <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))' }}>Proveedor</label>
+                    <select className="form-control" value={fProveedor} onChange={e => setFProveedor(e.target.value)}>
+                        <option value="">Todos</option>
+                        {proveedores.map(([cod, nombre]) => <option key={cod} value={cod}>{nombre}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))' }}>Ítem (código o descripción)</label>
+                    <input className="form-control" value={fItem} onChange={e => setFItem(e.target.value)} placeholder="Buscar ítem..." />
+                </div>
+                <div>
+                    <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))' }}>Estado</label>
+                    <select className="form-control" value={fEstado} onChange={e => setFEstado(e.target.value)}>
+                        <option value="">Todos</option>
+                        {estados.map(e => <option key={e} value={e}>{e}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))' }}>Desde</label>
+                    <input type="date" className="form-control" value={fDesde} onChange={e => setFDesde(e.target.value)} />
+                </div>
+                <div>
+                    <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))' }}>Hasta</label>
+                    <input type="date" className="form-control" value={fHasta} onChange={e => setFHasta(e.target.value)} />
+                </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                <div style={sectionStyle}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <h3 style={{ margin: 0, fontSize: '0.9rem' }}>Evolución de Precio por Ítem</h3>
+                        <select className="form-control" style={{ width: 'auto', fontSize: '0.8rem', padding: '0.4rem 0.6rem' }} value={defaultItem} onChange={e => setSelectedItem(e.target.value)}>
+                            {itemsUnicos.map(([cod, nombre]) => <option key={cod} value={cod}>{nombre}</option>)}
+                        </select>
+                    </div>
+                    {loading || evolucionItem.length === 0 ? (
+                        <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: '0.85rem' }}>Sin datos para este ítem</div>
+                    ) : (
+                        <ResponsiveContainer width="100%" height={220}>
+                            <LineChart data={evolucionItem} margin={{ top: 0, right: 0, left: 10, bottom: 0 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                <XAxis dataKey="fecha" tick={{ fontSize: 10 }} />
+                                <YAxis tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 10 }} />
+                                <Tooltip content={<CustomTooltip />} />
+                                <Legend wrapperStyle={{ fontSize: '0.75rem' }} />
+                                <Line type="monotone" dataKey="Precio" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
+                                <Line type="monotone" dataKey="Precio Prom. Almacén" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    )}
+                </div>
+
+                <div style={sectionStyle}>
+                    <h3 style={{ margin: '0 0 1rem', fontSize: '0.9rem' }}>Distribución por Estado</h3>
+                    {loading || distribucionEstado.length === 0 ? (
+                        <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: '0.85rem' }}>Sin datos aún</div>
+                    ) : (
+                        <ResponsiveContainer width="100%" height={220}>
+                            <PieChart>
+                                <Pie data={distribucionEstado} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value" label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={false} fontSize={10}>
+                                    {distribucionEstado.map((entry, index) => (
+                                        <Cell key={index} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                                    ))}
+                                </Pie>
+                                <Tooltip content={<CustomTooltip />} />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    )}
+                </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div style={sectionStyle}>
+                    <h3 style={{ margin: '0 0 1.25rem', fontSize: '0.9rem' }}>Top Proveedores por Impacto Económico</h3>
+                    {loading || topProveedoresImpacto.length === 0 ? (
+                        <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: '0.85rem' }}>Sin datos aún</div>
+                    ) : (
+                        <ResponsiveContainer width="100%" height={240}>
+                            <BarChart data={topProveedoresImpacto} margin={{ top: 0, right: 0, left: 10, bottom: 40 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                <XAxis dataKey="proveedor" tick={{ fontSize: 9 }} angle={-30} textAnchor="end" interval={0} />
+                                <YAxis tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
+                                <Tooltip content={<CustomTooltip />} />
+                                <Bar dataKey="Impacto" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    )}
+                </div>
+
+                <div style={sectionStyle}>
+                    <h3 style={{ margin: '0 0 1.25rem', fontSize: '0.9rem' }}>Top Materiales por Impacto Económico</h3>
+                    {loading || topMaterialesImpacto.length === 0 ? (
+                        <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: '0.85rem' }}>Sin datos aún</div>
+                    ) : (
+                        <ResponsiveContainer width="100%" height={240}>
+                            <BarChart data={topMaterialesImpacto} margin={{ top: 0, right: 0, left: 10, bottom: 40 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                <XAxis dataKey="material" tick={{ fontSize: 9 }} angle={-30} textAnchor="end" interval={0} />
+                                <YAxis tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
+                                <Tooltip content={<CustomTooltip />} />
+                                <Bar dataKey="Impacto" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    )}
+                </div>
+            </div>
+
+            <div style={sectionStyle}>
+                <h2 style={{ margin: '0 0 1.25rem 0', fontSize: '1rem' }}>Detalle de Movimientos ({filtered.length.toLocaleString('es-CO')})</h2>
+                <div className="admin-table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th></th><th>Fecha</th><th>Documento</th><th>Proveedor</th><th>Ítem</th>
+                                <th>Precio</th><th>Precio Prom.</th><th>% vs Penúltimo (mismo prov.)</th><th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {loading ? (
+                                <tr><td colSpan={9} style={{ textAlign: 'center', padding: '2rem', opacity: 0.5 }}>Cargando...</td></tr>
+                            ) : pageRows.length === 0 ? (
+                                <tr><td colSpan={9} style={{ textAlign: 'center', padding: '2rem', opacity: 0.5 }}>No hay registros con estos filtros.</td></tr>
+                            ) : pageRows.map(r => {
+                                const pctReal = r.porc_vs_penultimo ?? r.porc_variacion
+                                const expanded = expandedId === r.id
+                                const origen = origenProveedor(r.cod_proveedor)
+                                const tablero = esTablero(r.descripcion_item)
+                                const estancado = r.estado === 'En proceso' && (r.revisiones_en_proceso || 0) >= ESTANCADO_UMBRAL
+                                return (
+                                    <Fragment key={r.id}>
+                                        <tr style={{ cursor: 'pointer' }} onClick={() => setExpandedId(expanded ? null : r.id)}>
+                                            <td>{expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</td>
+                                            <td style={{ fontSize: '0.8rem' }}>{r.fecha_correo ? new Date(r.fecha_correo).toLocaleDateString('es-CO') : '—'}</td>
+                                            <td style={{ fontSize: '0.8rem' }}>{r.numero_documento || '—'}</td>
+                                            <td style={{ fontSize: '0.8rem' }}>
+                                                {r.descripcion_proveedor || r.cod_proveedor || '—'}
+                                                {origen && (
+                                                    <span style={{ marginLeft: '0.4rem', fontSize: '0.65rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: '99px', background: `${ORIGEN_COLOR[origen]}18`, color: ORIGEN_COLOR[origen] }}>{origen}</span>
+                                                )}
+                                            </td>
+                                            <td style={{ fontSize: '0.8rem' }}>
+                                                {r.descripcion_item || r.cod_item || '—'}
+                                                {tablero && (
+                                                    <span style={{ marginLeft: '0.4rem', fontSize: '0.65rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: '99px', background: 'hsla(204, 38%, 24%, 0.1)', color: 'hsl(var(--primary))' }}>TABLERO</span>
+                                                )}
+                                            </td>
+                                            <td style={{ fontSize: '0.85rem' }}>{fmt(r.precio)}</td>
+                                            <td style={{ fontSize: '0.85rem' }}>{fmt(r.precio_prom_almacen)}</td>
+                                            <td style={{ fontWeight: 600, fontSize: '0.85rem', color: (pctReal ?? 0) > 0 ? '#ef4444' : (pctReal ?? 0) < 0 ? '#10b981' : undefined }}>{fmtPct(pctReal)}</td>
+                                            <td>
+                                                {r.estado && <span className="badge badge-pending">{r.estado}</span>}
+                                                {estancado && (
+                                                    <span style={{ marginLeft: '0.4rem', display: 'inline-flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.65rem', fontWeight: 700, color: '#ef4444' }}>
+                                                        <AlertTriangle size={10} /> {r.revisiones_en_proceso}x
+                                                    </span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                        {expanded && (
+                                            <tr>
+                                                <td colSpan={9} style={{ background: 'hsla(204, 38%, 24%, 0.03)' }}>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>
+                                                        <div><strong>Tipo Documento:</strong> {r.tipo_documento || '—'}</div>
+                                                        <div><strong>Fecha Contabilización:</strong> {r.fecha_contabilizacion ? new Date(r.fecha_contabilizacion).toLocaleDateString('es-CO') : '—'}</div>
+                                                        <div><strong>Cod. Proveedor:</strong> {r.cod_proveedor || '—'}</div>
+                                                        <div><strong>Cod. Ítem:</strong> {r.cod_item || '—'}</div>
+                                                        <div><strong>% Variación general:</strong> {fmtPct(r.porc_variacion)}</div>
+                                                        <div><strong>Diferencia Precios (general):</strong> {fmt(r.diferencia_precios)}</div>
+                                                        <div><strong>Penúltimo Precio Prov.:</strong> {fmt(r.penultimo_precio_prov)}</div>
+                                                        <div><strong>Dif. vs Penúltimo:</strong> {fmt(r.dif_vs_penultimo_precio)}</div>
+                                                        <div><strong>Cantidad:</strong> {r.cantidad ?? '—'}</div>
+                                                        <div><strong>Total Línea (impacto):</strong> {fmt(r.total_linea)}</div>
+                                                        <div><strong>Precio en Lista SAP:</strong> {fmt(r.precio_lista_precios)}</div>
+                                                        <div><strong># Lista de Precio:</strong> {r.numero_lista_precio || '—'}</div>
+                                                        <div><strong>Responsable:</strong> {r.responsable || '—'}</div>
+                                                        <div><strong>Avoidance/Ahorro:</strong> {fmt(r.avoidance_ahorro)}</div>
+                                                        <div><strong>SI/NO:</strong> {r.si_no || '—'}</div>
+                                                        <div><strong>Sincronizaciones en proceso:</strong> {r.revisiones_en_proceso ?? 0}</div>
+                                                        <div style={{ gridColumn: '1 / -1' }}><strong>Observación:</strong> {r.obs_nl || '—'}</div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </Fragment>
+                                )
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+
+                {totalPages > 1 && (
+                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginTop: '1rem' }}>
+                        <button className="action-btn" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>Anterior</button>
+                        <span style={{ fontSize: '0.85rem', opacity: 0.7 }}>Página {page} de {totalPages}</span>
+                        <button className="action-btn" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>Siguiente</button>
+                    </div>
+                )}
+            </div>
+        </div>
+    )
+}

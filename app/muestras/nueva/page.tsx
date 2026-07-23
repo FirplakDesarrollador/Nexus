@@ -38,7 +38,7 @@ interface FormData {
     marca: string
     categoria: string
     unidad_medida: string
-    cantidad: number
+    cantidad: number | ''
     descripcion: string
     proposito_homologacion: string
     aplicacion: string
@@ -158,7 +158,7 @@ export default function NuevaMuestraPage() {
                     marca: form.marca || null,
                     categoria: form.categoria,
                     unidad_medida: form.unidad_medida,
-                    cantidad: form.cantidad,
+                    cantidad: form.cantidad || 1,
                     descripcion: form.descripcion || null,
                     proposito_homologacion: form.proposito_homologacion || null,
                     aplicacion: form.aplicacion || null,
@@ -345,7 +345,15 @@ export default function NuevaMuestraPage() {
                                     className="form-control"
                                     min={1}
                                     value={form.cantidad}
-                                    onChange={e => updateForm('cantidad', parseInt(e.target.value) || 1)}
+                                    onChange={e => {
+                                        const raw = e.target.value
+                                        if (raw === '') { updateForm('cantidad', ''); return }
+                                        const n = parseInt(raw)
+                                        if (!Number.isNaN(n)) updateForm('cantidad', n)
+                                    }}
+                                    onBlur={() => {
+                                        if (form.cantidad === '' || (form.cantidad as number) < 1) updateForm('cantidad', 1)
+                                    }}
                                 />
                             </div>
 
@@ -526,7 +534,7 @@ export default function NuevaMuestraPage() {
                                         <tr><td>Proveedor</td><td>{form.proveedor}</td></tr>
                                         {form.marca && <tr><td>Marca</td><td>{form.marca}</td></tr>}
                                         <tr><td>Categoría</td><td>{form.categoria}</td></tr>
-                                        <tr><td>Cantidad</td><td>{form.cantidad} {form.unidad_medida}</td></tr>
+                                        <tr><td>Cantidad</td><td>{form.cantidad || 1} {form.unidad_medida}</td></tr>
                                         {form.proposito_homologacion && <tr><td>Propósito</td><td>{form.proposito_homologacion}</td></tr>}
                                         {form.descripcion && <tr><td>Descripción</td><td>{form.descripcion}</td></tr>}
                                         {form.aplicacion && <tr><td>Aplicación</td><td>{form.aplicacion}</td></tr>}

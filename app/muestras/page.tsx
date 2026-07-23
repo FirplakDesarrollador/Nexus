@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, ClipboardList, PlusCircle, History, Search } from 'lucide-react'
+import { ArrowLeft, ClipboardList, PlusCircle, History, Search, Send } from 'lucide-react'
 import '../home/home.css'
 
 export default function MuestrasMenuPage() {
@@ -67,7 +67,16 @@ export default function MuestrasMenuPage() {
                             <PlusCircle size={32} />
                         </div>
                         <h2>Registrar Muestra</h2>
-                        <p>Ingresa una nueva muestra para proceso de homologación con su ficha técnica y evidencias.</p>
+                        <p>El área de negociación registrará las muestras recibidas.</p>
+                    </Link>
+
+                    {/* Solicitar muestra a proveedor */}
+                    <Link href="/muestras/solicitar" className="nav-card card">
+                        <div className="icon-wrapper">
+                            <Send size={32} />
+                        </div>
+                        <h2>Solicitar Muestra</h2>
+                        <p>Pide una muestra de producto al equipo de Negociación; crea automáticamente una tarea en Planner.</p>
                     </Link>
 
                     {/* Consultar mis muestras */}
@@ -76,7 +85,7 @@ export default function MuestrasMenuPage() {
                             <Search size={32} />
                         </div>
                         <h2>Mis Muestras</h2>
-                        <p>Consulta el estado de las muestras que has registrado y su progreso de homologación.</p>
+                        <p>Aprueba o rechaza las muestras - Espacio solo para ingeniería o persona encargada de ensayar la muestra.</p>
                     </Link>
 
                     {/* Historial */}
