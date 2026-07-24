@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-    ArrowLeft, TrendingUp, TrendingDown, RefreshCw, DollarSign,
+    ArrowLeft, TrendingUp, TrendingDown, RefreshCw,
     PackageSearch, AlertCircle, AlertTriangle, Loader2, ChevronDown, ChevronUp,
     Search, X
 } from 'lucide-react'
@@ -51,6 +51,7 @@ const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#1
 const PAGE_SIZE = 50
 const ORIGEN_COLOR: Record<string, string> = { Nacional: '#10b981', Exterior: '#6366f1' }
 const ESTANCADO_UMBRAL = 3
+const SIN_ESTADO = 'Sin estado'
 
 const fmt = (n: number | null | undefined) => n === null || n === undefined ? '—' : `$${Math.round(n).toLocaleString('es-CO')}`
 const fmtPct = (n: number | null | undefined) => n === null || n === undefined ? '—' : `${(n * 100).toFixed(1)}%`
@@ -227,9 +228,6 @@ export default function VariacionCostosPage() {
         }
     }
 
-    const excluidosFinalizado = useMemo(() => rows.filter(r => r.estado === 'Finalizado').length, [rows])
-    const excluidosNoAplica = useMemo(() => rows.filter(r => r.estado === 'No aplica').length, [rows])
-
     const proveedores = useMemo(() => {
         const map = new Map<string, string>()
         rows.forEach(r => { if (r.cod_proveedor) map.set(r.cod_proveedor, r.descripcion_proveedor || r.cod_proveedor) })
@@ -248,26 +246,32 @@ export default function VariacionCostosPage() {
         return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]))
     }, [rows])
 
-    const filtered = useMemo(() => {
+    // Respeta proveedor/ítem/fechas (no la vista ni el estado, que se aplican después) —
+    // así "Excluidos Finalizado/No aplica" también reflejan el rango de fechas seleccionado.
+    const filteredBase = useMemo(() => {
         return rows.filter(r => {
-            if (vista === 'activos' && !(!r.estado || r.estado === 'En proceso')) return false
             if (fProveedor && r.cod_proveedor !== fProveedor) return false
-            if (fEstado && r.estado !== fEstado) return false
             if (fItem && !`${r.cod_item ?? ''} ${r.descripcion_item ?? ''}`.toLowerCase().includes(fItem.toLowerCase())) return false
             if (fDesde && (!r.fecha_correo || r.fecha_correo < fDesde)) return false
             if (fHasta && (!r.fecha_correo || r.fecha_correo > fHasta)) return false
             return true
         })
-    }, [rows, vista, fProveedor, fEstado, fItem, fDesde, fHasta])
+    }, [rows, fProveedor, fItem, fDesde, fHasta])
+
+    const excluidosFinalizado = useMemo(() => filteredBase.filter(r => r.estado === 'Finalizado').length, [filteredBase])
+    const excluidosNoAplica = useMemo(() => filteredBase.filter(r => r.estado === 'No aplica').length, [filteredBase])
+
+    const filtered = useMemo(() => {
+        return filteredBase.filter(r => {
+            if (vista === 'activos' && !(!r.estado || r.estado === 'En proceso')) return false
+            if (fEstado === SIN_ESTADO ? !!r.estado : (fEstado && r.estado !== fEstado)) return false
+            return true
+        })
+    }, [filteredBase, vista, fEstado])
 
     const totalRegistros = filtered.length
-    // Variación real: frente al penúltimo precio del MISMO proveedor cuando existe
-    // (más confiable que la variación general, que puede mezclar distintos proveedores).
-    const variacionesReales = filtered.map(r => r.porc_vs_penultimo ?? r.porc_variacion).filter((v): v is number => v !== null && v !== undefined)
-    const promedioVariacion = variacionesReales.length ? variacionesReales.reduce((a, b) => a + b, 0) / variacionesReales.length : 0
     const incrementos = filtered.filter(r => (r.porc_variacion ?? 0) > 0).length
     const decrementos = filtered.filter(r => (r.porc_variacion ?? 0) < 0).length
-    const impactoTotal = filtered.reduce((acc, r) => acc + impactoDe(r), 0)
     const enSeguimientoEstancado = filtered.filter(r => r.estado === 'En proceso' && (r.revisiones_en_proceso || 0) >= ESTANCADO_UMBRAL).length
     const ultimaSync = rows.reduce<string | null>((max, r) => (r.synced_at && (!max || r.synced_at > max)) ? r.synced_at : max, null)
 
@@ -288,37 +292,10 @@ export default function VariacionCostosPage() {
             }))
     }, [filtered, defaultItem])
 
-    // Priorización por impacto económico (Total Línea), no por % de variación promedio.
-    const topProveedoresImpacto = useMemo(() => {
-        const map = new Map<string, number>()
-        filtered.forEach(r => {
-            if (!r.cod_proveedor) return
-            const key = r.descripcion_proveedor || r.cod_proveedor
-            map.set(key, (map.get(key) || 0) + impactoDe(r))
-        })
-        return Array.from(map.entries())
-            .map(([proveedor, impacto]) => ({ proveedor, Impacto: Math.round(impacto) }))
-            .sort((a, b) => b.Impacto - a.Impacto)
-            .slice(0, 8)
-    }, [filtered])
-
-    const topMaterialesImpacto = useMemo(() => {
-        const map = new Map<string, number>()
-        filtered.forEach(r => {
-            if (!r.cod_item) return
-            const key = r.descripcion_item || r.cod_item
-            map.set(key, (map.get(key) || 0) + impactoDe(r))
-        })
-        return Array.from(map.entries())
-            .map(([material, impacto]) => ({ material, Impacto: Math.round(impacto) }))
-            .sort((a, b) => b.Impacto - a.Impacto)
-            .slice(0, 8)
-    }, [filtered])
-
     const distribucionEstado = useMemo(() => {
         const map = new Map<string, number>()
         filtered.forEach(r => {
-            const key = r.estado || 'Sin estado'
+            const key = r.estado || SIN_ESTADO
             map.set(key, (map.get(key) || 0) + 1)
         })
         return Array.from(map.entries()).map(([name, value]) => ({ name, value }))
@@ -391,10 +368,8 @@ export default function VariacionCostosPage() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
                 {[
                     { icon: <PackageSearch size={16} style={{ opacity: 0.5 }} />, label: 'Registros (vista actual)', value: totalRegistros.toLocaleString('es-CO') },
-                    { icon: <DollarSign size={16} style={{ opacity: 0.5 }} />, label: 'Impacto Económico Total', value: fmt(impactoTotal) },
-                    { icon: promedioVariacion >= 0 ? <TrendingUp size={16} color="#ef4444" /> : <TrendingDown size={16} color="#10b981" />, label: 'Variación vs. Mismo Proveedor', value: fmtPct(promedioVariacion), color: promedioVariacion >= 0 ? '#ef4444' : '#10b981' },
                     { icon: <TrendingUp size={16} color="#ef4444" />, label: 'Incrementos', value: incrementos.toLocaleString('es-CO'), color: '#ef4444' },
-                    { icon: <TrendingDown size={16} color="#10b981" />, label: 'Decrementos', value: decrementos.toLocaleString('es-CO'), color: '#10b981' },
+                    { icon: <TrendingDown size={16} color="#10b981" />, label: 'Decrecimientos', value: decrementos.toLocaleString('es-CO'), color: '#10b981' },
                     { icon: <AlertTriangle size={16} color="#f59e0b" />, label: 'Excluidos Finalizado', value: excluidosFinalizado.toLocaleString('es-CO') },
                     { icon: <AlertTriangle size={16} color="#f59e0b" />, label: 'Excluidos No Aplica', value: excluidosNoAplica.toLocaleString('es-CO') },
                     { icon: <AlertTriangle size={16} color="#ef4444" />, label: 'Posible Estancamiento', value: enSeguimientoEstancado.toLocaleString('es-CO'), color: enSeguimientoEstancado > 0 ? '#ef4444' : undefined },
@@ -425,6 +400,7 @@ export default function VariacionCostosPage() {
                     <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))' }}>Estado</label>
                     <select className="form-control" value={fEstado} onChange={e => setFEstado(e.target.value)}>
                         <option value="">Todos</option>
+                        <option value={SIN_ESTADO}>Sin estado</option>
                         {estados.map(e => <option key={e} value={e}>{e}</option>)}
                     </select>
                 </div>
@@ -438,87 +414,64 @@ export default function VariacionCostosPage() {
                 </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                <div style={sectionStyle}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                        <h3 style={{ margin: 0, fontSize: '0.9rem' }}>Evolución de Precio por Ítem</h3>
-                        <ItemSearchSelect
-                            options={itemsUnicos}
-                            value={defaultItem}
-                            onChange={setSelectedItem}
-                            placeholder="Buscar ítem..."
-                        />
-                    </div>
-                    {loading || evolucionItem.length === 0 ? (
-                        <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: '0.85rem' }}>Sin datos para este ítem</div>
-                    ) : (
-                        <ResponsiveContainer width="100%" height={220}>
-                            <LineChart data={evolucionItem} margin={{ top: 0, right: 0, left: 10, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                <XAxis dataKey="fecha" tick={{ fontSize: 10 }} />
-                                <YAxis tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 10 }} />
-                                <Tooltip content={<CustomTooltip />} />
-                                <Legend wrapperStyle={{ fontSize: '0.75rem' }} />
-                                <Line type="monotone" dataKey="Precio" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
-                                <Line type="monotone" dataKey="Precio Prom. Almacén" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
-                            </LineChart>
-                        </ResponsiveContainer>
-                    )}
+            <div style={{ ...sectionStyle, marginBottom: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <h3 style={{ margin: 0, fontSize: '0.9rem' }}>Evolución de Precio por Ítem</h3>
+                    <ItemSearchSelect
+                        options={itemsUnicos}
+                        value={defaultItem}
+                        onChange={setSelectedItem}
+                        placeholder="Buscar ítem..."
+                    />
                 </div>
-
-                <div style={sectionStyle}>
-                    <h3 style={{ margin: '0 0 1rem', fontSize: '0.9rem' }}>Distribución por Estado</h3>
-                    {loading || distribucionEstado.length === 0 ? (
-                        <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: '0.85rem' }}>Sin datos aún</div>
-                    ) : (
-                        <ResponsiveContainer width="100%" height={220}>
-                            <PieChart>
-                                <Pie data={distribucionEstado} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value" label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={false} fontSize={10}>
-                                    {distribucionEstado.map((entry, index) => (
-                                        <Cell key={index} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                                    ))}
-                                </Pie>
-                                <Tooltip content={<CustomTooltip />} />
-                            </PieChart>
-                        </ResponsiveContainer>
-                    )}
-                </div>
+                {loading || evolucionItem.length === 0 ? (
+                    <div style={{ height: 380, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: '0.85rem' }}>Sin datos para este ítem</div>
+                ) : (
+                    <ResponsiveContainer width="100%" height={380}>
+                        <LineChart data={evolucionItem} margin={{ top: 0, right: 0, left: 10, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                            <XAxis dataKey="fecha" tick={{ fontSize: 10 }} />
+                            <YAxis tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 10 }} />
+                            <Tooltip content={<CustomTooltip />} />
+                            <Legend wrapperStyle={{ fontSize: '0.75rem' }} />
+                            <Line type="monotone" dataKey="Precio" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
+                            <Line type="monotone" dataKey="Precio Prom. Almacén" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
+                        </LineChart>
+                    </ResponsiveContainer>
+                )}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
-                <div style={sectionStyle}>
-                    <h3 style={{ margin: '0 0 1.25rem', fontSize: '0.9rem' }}>Top Proveedores por Impacto Económico</h3>
-                    {loading || topProveedoresImpacto.length === 0 ? (
-                        <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: '0.85rem' }}>Sin datos aún</div>
-                    ) : (
-                        <ResponsiveContainer width="100%" height={240}>
-                            <BarChart data={topProveedoresImpacto} margin={{ top: 0, right: 0, left: 10, bottom: 40 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                <XAxis dataKey="proveedor" tick={{ fontSize: 9 }} angle={-30} textAnchor="end" interval={0} />
-                                <YAxis tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
-                                <Tooltip content={<CustomTooltip />} />
-                                <Bar dataKey="Impacto" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    )}
-                </div>
-
-                <div style={sectionStyle}>
-                    <h3 style={{ margin: '0 0 1.25rem', fontSize: '0.9rem' }}>Top Materiales por Impacto Económico</h3>
-                    {loading || topMaterialesImpacto.length === 0 ? (
-                        <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: '0.85rem' }}>Sin datos aún</div>
-                    ) : (
-                        <ResponsiveContainer width="100%" height={240}>
-                            <BarChart data={topMaterialesImpacto} margin={{ top: 0, right: 0, left: 10, bottom: 40 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                <XAxis dataKey="material" tick={{ fontSize: 9 }} angle={-30} textAnchor="end" interval={0} />
-                                <YAxis tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
-                                <Tooltip content={<CustomTooltip />} />
-                                <Bar dataKey="Impacto" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    )}
-                </div>
+            <div style={{ ...sectionStyle, marginBottom: '1.5rem' }}>
+                <h3 style={{ margin: '0 0 1rem', fontSize: '0.9rem' }}>Distribución por Estado</h3>
+                <p style={{ margin: '0 0 1rem', fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))' }}>Haz clic en una porción para filtrar la tabla por ese estado.</p>
+                {loading || distribucionEstado.length === 0 ? (
+                    <div style={{ height: 240, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: '0.85rem' }}>Sin datos aún</div>
+                ) : (
+                    <ResponsiveContainer width="100%" height={240}>
+                        <PieChart>
+                            <Pie
+                                data={distribucionEstado}
+                                cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3}
+                                dataKey="value"
+                                label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                                labelLine={false}
+                                fontSize={10}
+                                cursor="pointer"
+                                onClick={(entry: any) => setFEstado(prev => prev === entry.name ? '' : entry.name)}
+                            >
+                                {distribucionEstado.map((entry, index) => (
+                                    <Cell
+                                        key={index}
+                                        fill={CHART_COLORS[index % CHART_COLORS.length]}
+                                        stroke={fEstado === entry.name ? 'hsl(var(--foreground))' : undefined}
+                                        strokeWidth={fEstado === entry.name ? 2 : 0}
+                                    />
+                                ))}
+                            </Pie>
+                            <Tooltip content={<CustomTooltip />} />
+                        </PieChart>
+                    </ResponsiveContainer>
+                )}
             </div>
 
             <div style={sectionStyle}>
@@ -528,7 +481,7 @@ export default function VariacionCostosPage() {
                         <thead>
                             <tr>
                                 <th></th><th>Fecha</th><th>Documento</th><th>Proveedor</th><th>Ítem</th>
-                                <th>Precio</th><th>Precio Prom.</th><th>% vs Penúltimo (mismo prov.)</th><th>Estado</th>
+                                <th>Precio</th><th>Penúltimo Precio Prov.</th><th>% vs Penúltimo (mismo prov.)</th><th>Estado</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -561,7 +514,7 @@ export default function VariacionCostosPage() {
                                                 )}
                                             </td>
                                             <td style={{ fontSize: '0.85rem' }}>{fmt(r.precio)}</td>
-                                            <td style={{ fontSize: '0.85rem' }}>{fmt(r.precio_prom_almacen)}</td>
+                                            <td style={{ fontSize: '0.85rem' }}>{fmt(r.penultimo_precio_prov)}</td>
                                             <td style={{ fontWeight: 600, fontSize: '0.85rem', color: (pctReal ?? 0) > 0 ? '#ef4444' : (pctReal ?? 0) < 0 ? '#10b981' : undefined }}>{fmtPct(pctReal)}</td>
                                             <td>
                                                 {r.estado && <span className="badge badge-pending">{r.estado}</span>}

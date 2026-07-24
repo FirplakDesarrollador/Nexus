@@ -84,16 +84,20 @@ function rowToRecord(row: unknown[]): Record<string, unknown> {
 
 // Identidad estable entre sincronizaciones — permite reconocer la misma fila entre
 // noches (para el seguimiento de casos "En proceso" que se calcula más abajo).
-// El índice de ocurrencia desempata filas con exactamente las mismas claves.
+// Se basa solo en columnas que identifican el movimiento (no en su posición dentro
+// de la hoja): un desempate por "ocurrencia" cambiaba de una sincronización a otra
+// si el orden de las filas variaba, generando duplicados que nunca se limpiaban.
+// Si dos filas comparten exactamente las mismas claves (duplicado real y raro),
+// se conserva la última aparición en la hoja.
 function withSourceKey(records: Record<string, unknown>[]): Record<string, unknown>[] {
-    const seen = new Map<string, number>()
-    return records.map((record): Record<string, unknown> => {
+    const withKey = records.map((record): Record<string, unknown> => {
         const baseKey = [record.fecha_correo, record.tipo_documento, record.numero_documento, record.cod_item].join('|')
-        const occurrence = (seen.get(baseKey) ?? 0) + 1
-        seen.set(baseKey, occurrence)
-        const sourceKey = createHash('sha256').update(`${baseKey}|${occurrence}`).digest('hex')
+        const sourceKey = createHash('sha256').update(baseKey).digest('hex')
         return { ...record, source_key: sourceKey }
     })
+    const bySourceKey = new Map<string, Record<string, unknown>>()
+    for (const record of withKey) bySourceKey.set(record.source_key as string, record)
+    return Array.from(bySourceKey.values())
 }
 
 export async function runVariacionCostosSync(): Promise<{ rows: number; syncedAt: string }> {
@@ -149,6 +153,15 @@ export async function runVariacionCostosSync(): Promise<{ rows: number; syncedAt
             .upsert(batch, { onConflict: 'source_key' })
         if (upsertError) throw new Error(`Error sincronizando fila ${i}: ${upsertError.message}`)
     }
+
+    // Poda filas obsoletas: cualquier registro no tocado por esta sincronización (synced_at
+    // anterior) ya no existe en la hoja, o quedó huérfano por una versión anterior de la
+    // identidad estable — se elimina para que la tabla refleje fielmente el Excel.
+    const { error: pruneError } = await supabase
+        .from('variacion_costos')
+        .delete()
+        .lt('synced_at', syncedAt)
+    if (pruneError) throw new Error(`Error limpiando filas obsoletas: ${pruneError.message}`)
 
     return { rows: recordsConSeguimiento.length, syncedAt }
 }
