@@ -463,7 +463,7 @@ export default function NewRequestPage() {
                             <SearchableSelect
                                 label="Responsable de Compra"
                                 options={users
-                                    .filter(u => ['Nallely Lopera', 'Alejandro Fernandez'].includes(u.nombre))
+                                    .filter(u => ['nallely.lopera@firplak.com', 'alejandro.fernandez@firplak.com', 'isabel.isaza@firplak.com'].includes((u.email || '').toLowerCase()))
                                     .map(u => ({ id: u.id, label: u.nombre }))}
                                 value={form.responsable_id}
                                 onChange={val => setForm({ ...form, responsable_id: val })}
