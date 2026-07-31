@@ -1,28 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { runVariacionCostosSync } from '@/lib/variacionCostosSync'
+import { getConnectionStatus } from '@/lib/microsoftDelegatedAuth'
 
-const CRON_SECRET = process.env.CRON_SECRET!
+const NALLELY_EMAIL = 'nallely.lopera@firplak.com'
 
-// Llamado por Vercel Cron todas las noches
 export async function GET(req: NextRequest) {
-    try {
-        const auth = req.headers.get('authorization')
-        if (!CRON_SECRET || auth !== `Bearer ${CRON_SECRET}`) {
-            return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-        }
-
-        const result = await runVariacionCostosSync()
-        return NextResponse.json({ success: true, ...result })
-
-    } catch (err: any) {
-        console.error('[costos/variacion-sync][GET]', err)
-        return NextResponse.json({ error: err.message }, { status: 500 })
-    }
-}
-
-// Botón "Actualizar ahora" — requiere sesión de un usuario con rol ADMIN
-export async function POST(req: NextRequest) {
     try {
         const accessToken = req.headers.get('authorization')?.replace('Bearer ', '')
         if (!accessToken) {
@@ -46,11 +28,11 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Requiere rol ADMIN' }, { status: 403 })
         }
 
-        const result = await runVariacionCostosSync()
-        return NextResponse.json({ success: true, ...result })
+        const status = await getConnectionStatus(NALLELY_EMAIL)
+        return NextResponse.json({ email: NALLELY_EMAIL, ...status })
 
     } catch (err: any) {
-        console.error('[costos/variacion-sync][POST]', err)
+        console.error('[auth/microsoft/status][GET]', err)
         return NextResponse.json({ error: err.message }, { status: 500 })
     }
 }
