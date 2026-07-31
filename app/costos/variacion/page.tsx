@@ -66,6 +66,27 @@ const fmt = (n: number | null | undefined) => n === null || n === undefined ? '�
 const fmtPct = (n: number | null | undefined) => n === null || n === undefined ? '—' : `${(n * 100).toFixed(1)}%`
 const fmtDate = (d: string | null) => d ? new Date(d).toLocaleDateString('es-CO') : '—'
 
+// Texto en minúsculas de una columna del archivo, usado para el filtro por columna
+// (compara contra lo mismo que se ve renderizado, no el valor crudo).
+function archivoCellText(r: VariacionRow, key: string): string {
+    switch (key) {
+        case 'fecha_correo': return fmtDate(r.fecha_correo).toLowerCase()
+        case 'fecha_contabilizacion': return fmtDate(r.fecha_contabilizacion).toLowerCase()
+        case 'precio': return fmt(r.precio).toLowerCase()
+        case 'precio_prom_almacen': return fmt(r.precio_prom_almacen).toLowerCase()
+        case 'diferencia_precios': return fmt(r.diferencia_precios).toLowerCase()
+        case 'porc_variacion': return fmtPct(r.porc_variacion).toLowerCase()
+        case 'penultimo_precio_prov': return fmt(r.penultimo_precio_prov).toLowerCase()
+        case 'dif_vs_penultimo_precio': return fmt(r.dif_vs_penultimo_precio).toLowerCase()
+        case 'porc_vs_penultimo': return fmtPct(r.porc_vs_penultimo).toLowerCase()
+        case 'cantidad': return (r.cantidad ?? '').toString().toLowerCase()
+        case 'total_linea': return fmt(r.total_linea).toLowerCase()
+        case 'precio_lista_precios': return fmt(r.precio_lista_precios).toLowerCase()
+        case 'origen': return (r.origen === 'correo' ? 'correo' : 'excel')
+        default: return ((r as any)[key] ?? '').toString().toLowerCase()
+    }
+}
+
 function esTablero(descripcion: string | null): boolean {
     return !!descripcion && descripcion.toUpperCase().includes('TABLERO')
 }
@@ -197,6 +218,7 @@ function VariacionCostosContent() {
     const [msMsg, setMsMsg] = useState<string | null>(null)
     const [checkingCorreos, setCheckingCorreos] = useState(false)
     const [archivoPage, setArchivoPage] = useState(1)
+    const [archivoFilters, setArchivoFilters] = useState<Record<string, string>>({})
 
     const [vista, setVista] = useState<'activos' | 'todo'>('activos')
     const [fProveedor, setFProveedor] = useState('')
@@ -241,6 +263,7 @@ function VariacionCostosContent() {
     }, [isAdmin])
 
     useEffect(() => { setPage(1) }, [vista, fProveedor, fEstado, fItem, fDesde, fHasta])
+    useEffect(() => { setArchivoPage(1) }, [archivoFilters])
 
     // Mensajes de vuelta del flujo de conexión con Microsoft (?msConnected=... / ?msError=...)
     useEffect(() => {
@@ -352,8 +375,14 @@ function VariacionCostosContent() {
     const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
     const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
-    const archivoTotalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
-    const archivoPageRows = rows.slice((archivoPage - 1) * PAGE_SIZE, archivoPage * PAGE_SIZE)
+    const archivoFilteredRows = useMemo(() => {
+        const activos = Object.entries(archivoFilters).filter(([, v]) => v.trim() !== '')
+        if (activos.length === 0) return rows
+        return rows.filter(r => activos.every(([key, val]) => archivoCellText(r, key).includes(val.toLowerCase())))
+    }, [rows, archivoFilters])
+
+    const archivoTotalPages = Math.max(1, Math.ceil(archivoFilteredRows.length / PAGE_SIZE))
+    const archivoPageRows = archivoFilteredRows.slice((archivoPage - 1) * PAGE_SIZE, archivoPage * PAGE_SIZE)
 
     const sectionStyle = { background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '1rem', padding: '1.5rem' }
 
@@ -602,9 +631,6 @@ function VariacionCostosContent() {
                                                                 <div><strong>Total Línea (impacto):</strong> {fmt(r.total_linea)}</div>
                                                                 <div><strong>Precio en Lista SAP:</strong> {fmt(r.precio_lista_precios)}</div>
                                                                 <div><strong># Lista de Precio:</strong> {r.numero_lista_precio || '—'}</div>
-                                                                <div><strong>Responsable:</strong> {r.responsable || '—'}</div>
-                                                                <div><strong>Avoidance/Ahorro:</strong> {fmt(r.avoidance_ahorro)}</div>
-                                                                <div><strong>SI/NO:</strong> {r.si_no || '—'}</div>
                                                                 <div><strong>Origen:</strong> {r.origen === 'correo' ? 'Correo' : 'Excel'}</div>
                                                                 <div><strong>Sincronizaciones en proceso:</strong> {r.revisiones_en_proceso ?? 0}</div>
                                                                 <div style={{ gridColumn: '1 / -1' }}><strong>Observación:</strong> {r.obs_nl || '—'}</div>
@@ -622,7 +648,22 @@ function VariacionCostosContent() {
                         {totalPages > 1 && (
                             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginTop: '1rem' }}>
                                 <button className="action-btn" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>Anterior</button>
-                                <span style={{ fontSize: '0.85rem', opacity: 0.7 }}>Página {page} de {totalPages}</span>
+                                <span style={{ fontSize: '0.85rem', opacity: 0.7, display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                                    Página
+                                    <input
+                                        type="number"
+                                        className="form-control"
+                                        style={{ width: 60, fontSize: '0.85rem', padding: '0.2rem 0.4rem', textAlign: 'center' }}
+                                        min={1}
+                                        max={totalPages}
+                                        value={page}
+                                        onChange={e => {
+                                            const n = parseInt(e.target.value, 10)
+                                            if (!Number.isNaN(n)) setPage(Math.min(totalPages, Math.max(1, n)))
+                                        }}
+                                    />
+                                    de {totalPages}
+                                </span>
                                 <button className="action-btn" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>Siguiente</button>
                             </div>
                         )}
@@ -673,9 +714,16 @@ function VariacionCostosContent() {
                     </div>
 
                     <div style={sectionStyle}>
-                        <h2 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem' }}>Archivo Completo ({rows.length.toLocaleString('es-CO')} filas)</h2>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                            <h2 style={{ margin: 0, fontSize: '1rem' }}>
+                                Archivo Completo ({archivoFilteredRows.length.toLocaleString('es-CO')} de {rows.length.toLocaleString('es-CO')} filas)
+                            </h2>
+                            {Object.values(archivoFilters).some(v => v.trim() !== '') && (
+                                <button className="action-btn" style={{ fontSize: '0.78rem' }} onClick={() => setArchivoFilters({})}>Limpiar filtros</button>
+                            )}
+                        </div>
                         <p style={{ margin: '0 0 1.25rem', fontSize: '0.78rem', color: 'hsl(var(--muted-foreground))' }}>
-                            Todas las columnas, sin filtrar. Edita Estado y Observaciones directamente aquí — se guardan al instante.
+                            Todas las columnas, filtrables individualmente. Edita Estado y Observaciones directamente aquí — se guardan al instante.
                         </p>
                         <div className="admin-table-container">
                             <table>
@@ -686,15 +734,58 @@ function VariacionCostosContent() {
                                         <th>Precio</th><th>Precio Prom.</th><th>Dif. Precios</th><th>% Variación</th>
                                         <th>Penúltimo Precio</th><th>Dif. Penúltimo</th><th>% Penúltimo</th>
                                         <th>Cantidad</th><th>Total Línea</th><th>Precio Lista</th><th># Lista</th>
-                                        <th style={{ minWidth: 180 }}>Observaciones</th><th>Responsable</th>
-                                        <th style={{ minWidth: 130 }}>Estado</th><th>Avoidance</th><th>SI/NO</th><th>Origen</th>
+                                        <th style={{ minWidth: 180 }}>Observaciones</th>
+                                        <th style={{ minWidth: 130 }}>Estado</th><th>Origen</th>
+                                    </tr>
+                                    <tr>
+                                        {[
+                                            'fecha_correo', 'tipo_documento', 'numero_documento', 'fecha_contabilizacion',
+                                            'cod_proveedor', 'descripcion_proveedor', 'cod_item', 'descripcion_item',
+                                            'precio', 'precio_prom_almacen', 'diferencia_precios', 'porc_variacion',
+                                            'penultimo_precio_prov', 'dif_vs_penultimo_precio', 'porc_vs_penultimo',
+                                            'cantidad', 'total_linea', 'precio_lista_precios', 'numero_lista_precio',
+                                            'obs_nl'
+                                        ].map(key => (
+                                            <th key={key} style={{ padding: '0.3rem' }}>
+                                                <input
+                                                    className="form-control"
+                                                    style={{ fontSize: '0.7rem', padding: '0.25rem 0.4rem', width: '100%' }}
+                                                    placeholder="Filtrar..."
+                                                    value={archivoFilters[key] || ''}
+                                                    onChange={e => setArchivoFilters(prev => ({ ...prev, [key]: e.target.value }))}
+                                                />
+                                            </th>
+                                        ))}
+                                        <th style={{ padding: '0.3rem' }}>
+                                            <select
+                                                className="form-control"
+                                                style={{ fontSize: '0.7rem', padding: '0.25rem 0.4rem', width: '100%' }}
+                                                value={archivoFilters.estado || ''}
+                                                onChange={e => setArchivoFilters(prev => ({ ...prev, estado: e.target.value }))}
+                                            >
+                                                <option value="">Todos</option>
+                                                {ESTADOS_EDITABLES.map(e => <option key={e} value={e.toLowerCase()}>{e}</option>)}
+                                            </select>
+                                        </th>
+                                        <th style={{ padding: '0.3rem' }}>
+                                            <select
+                                                className="form-control"
+                                                style={{ fontSize: '0.7rem', padding: '0.25rem 0.4rem', width: '100%' }}
+                                                value={archivoFilters.origen || ''}
+                                                onChange={e => setArchivoFilters(prev => ({ ...prev, origen: e.target.value }))}
+                                            >
+                                                <option value="">Todos</option>
+                                                <option value="correo">Correo</option>
+                                                <option value="excel">Excel</option>
+                                            </select>
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {loading ? (
-                                        <tr><td colSpan={24} style={{ textAlign: 'center', padding: '2rem', opacity: 0.5 }}>Cargando...</td></tr>
+                                        <tr><td colSpan={22} style={{ textAlign: 'center', padding: '2rem', opacity: 0.5 }}>Cargando...</td></tr>
                                     ) : archivoPageRows.length === 0 ? (
-                                        <tr><td colSpan={24} style={{ textAlign: 'center', padding: '2rem', opacity: 0.5 }}>Sin datos todavía.</td></tr>
+                                        <tr><td colSpan={22} style={{ textAlign: 'center', padding: '2rem', opacity: 0.5 }}>Sin datos con estos filtros.</td></tr>
                                     ) : archivoPageRows.map(r => (
                                         <tr key={r.id}>
                                             <td style={{ fontSize: '0.78rem' }}>{fmtDate(r.fecha_correo)}</td>
@@ -726,7 +817,6 @@ function VariacionCostosContent() {
                                                     onBlur={e => { if (e.target.value !== (r.obs_nl || '')) updateRow(r.id, 'obs_nl', e.target.value) }}
                                                 />
                                             </td>
-                                            <td style={{ fontSize: '0.78rem' }}>{r.responsable || '—'}</td>
                                             <td>
                                                 <select
                                                     className="form-control"
@@ -738,8 +828,6 @@ function VariacionCostosContent() {
                                                     {ESTADOS_EDITABLES.map(e => <option key={e} value={e}>{e}</option>)}
                                                 </select>
                                             </td>
-                                            <td style={{ fontSize: '0.78rem' }}>{fmt(r.avoidance_ahorro)}</td>
-                                            <td style={{ fontSize: '0.78rem' }}>{r.si_no || '—'}</td>
                                             <td style={{ fontSize: '0.78rem' }}>{r.origen === 'correo' ? 'Correo' : 'Excel'}</td>
                                         </tr>
                                     ))}
@@ -750,7 +838,22 @@ function VariacionCostosContent() {
                         {archivoTotalPages > 1 && (
                             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginTop: '1rem' }}>
                                 <button className="action-btn" disabled={archivoPage <= 1} onClick={() => setArchivoPage(p => Math.max(1, p - 1))}>Anterior</button>
-                                <span style={{ fontSize: '0.85rem', opacity: 0.7 }}>Página {archivoPage} de {archivoTotalPages}</span>
+                                <span style={{ fontSize: '0.85rem', opacity: 0.7, display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                                    Página
+                                    <input
+                                        type="number"
+                                        className="form-control"
+                                        style={{ width: 60, fontSize: '0.85rem', padding: '0.2rem 0.4rem', textAlign: 'center' }}
+                                        min={1}
+                                        max={archivoTotalPages}
+                                        value={archivoPage}
+                                        onChange={e => {
+                                            const n = parseInt(e.target.value, 10)
+                                            if (!Number.isNaN(n)) setArchivoPage(Math.min(archivoTotalPages, Math.max(1, n)))
+                                        }}
+                                    />
+                                    de {archivoTotalPages}
+                                </span>
                                 <button className="action-btn" disabled={archivoPage >= archivoTotalPages} onClick={() => setArchivoPage(p => Math.min(archivoTotalPages, p + 1))}>Siguiente</button>
                             </div>
                         )}
