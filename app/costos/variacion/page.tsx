@@ -221,7 +221,7 @@ function VariacionCostosContent() {
 
     const fetchRows = async () => {
         setLoading(true)
-        const { data } = await supabase.schema('nexus').from('variacion_costos').select('*').order('fecha_correo', { ascending: false })
+        const { data } = await supabase.schema('nexus').from('variacion_costos').select('*').order('fecha_correo', { ascending: false, nullsFirst: false })
         if (data) setRows(data as VariacionRow[])
         setLoading(false)
     }
