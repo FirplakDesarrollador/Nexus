@@ -1,13 +1,13 @@
 'use client'
 
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
     ArrowLeft, TrendingUp, TrendingDown, RefreshCw,
     PackageSearch, AlertCircle, AlertTriangle, Loader2, ChevronDown, ChevronUp,
-    Search, X
+    Search, X, Mail, CheckCircle2, Link2
 } from 'lucide-react'
 import '../../home/home.css'
 import '../../admin/admin.css'
@@ -45,6 +45,13 @@ interface VariacionRow {
     si_no: string | null
     synced_at: string | null
     revisiones_en_proceso: number | null
+    origen: string | null
+}
+
+interface MsStatus {
+    connected: boolean
+    email: string
+    expiresAt?: string
 }
 
 const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#14b8a6', '#f97316']
@@ -52,9 +59,11 @@ const PAGE_SIZE = 50
 const ORIGEN_COLOR: Record<string, string> = { Nacional: '#10b981', Exterior: '#6366f1' }
 const ESTANCADO_UMBRAL = 3
 const SIN_ESTADO = 'Sin estado'
+const ESTADOS_EDITABLES = ['Sin iniciar', 'En proceso', 'Finalizado', 'No aplica']
 
 const fmt = (n: number | null | undefined) => n === null || n === undefined ? '—' : `$${Math.round(n).toLocaleString('es-CO')}`
 const fmtPct = (n: number | null | undefined) => n === null || n === undefined ? '—' : `${(n * 100).toFixed(1)}%`
+const fmtDate = (d: string | null) => d ? new Date(d).toLocaleDateString('es-CO') : '—'
 
 function esTablero(descripcion: string | null): boolean {
     return !!descripcion && descripcion.toUpperCase().includes('TABLERO')
@@ -163,17 +172,30 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 }
 
 export default function VariacionCostosPage() {
+    return (
+        <Suspense fallback={<div className="home-container"><p>Cargando...</p></div>}>
+            <VariacionCostosContent />
+        </Suspense>
+    )
+}
+
+function VariacionCostosContent() {
     const supabase = createClient()
     const router = useRouter()
+    const searchParams = useSearchParams()
 
     const [user, setUser] = useState<any>(null)
     const [isAdmin, setIsAdmin] = useState<boolean | null>(null)
     const [rows, setRows] = useState<VariacionRow[]>([])
     const [loading, setLoading] = useState(true)
-    const [syncing, setSyncing] = useState(false)
-    const [syncMsg, setSyncMsg] = useState<string | null>(null)
     const [expandedId, setExpandedId] = useState<string | null>(null)
     const [page, setPage] = useState(1)
+
+    const [tab, setTab] = useState<'historico' | 'archivo'>('historico')
+    const [msStatus, setMsStatus] = useState<MsStatus | null>(null)
+    const [msMsg, setMsMsg] = useState<string | null>(null)
+    const [checkingCorreos, setCheckingCorreos] = useState(false)
+    const [archivoPage, setArchivoPage] = useState(1)
 
     const [vista, setVista] = useState<'activos' | 'todo'>('activos')
     const [fProveedor, setFProveedor] = useState('')
@@ -201,31 +223,53 @@ export default function VariacionCostosPage() {
         setLoading(false)
     }
 
+    const fetchMsStatus = async () => {
+        const { data: { session } } = await supabase.auth.getSession()
+        const res = await fetch('/api/auth/microsoft/status', {
+            headers: { Authorization: `Bearer ${session?.access_token}` }
+        })
+        const json = await res.json()
+        if (res.ok) setMsStatus(json)
+    }
+
     useEffect(() => {
-        if (isAdmin === true) fetchRows()
+        if (isAdmin === true) { fetchRows(); fetchMsStatus() }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isAdmin])
 
     useEffect(() => { setPage(1) }, [vista, fProveedor, fEstado, fItem, fDesde, fHasta])
 
-    const handleSync = async () => {
-        setSyncing(true)
-        setSyncMsg(null)
+    // Mensajes de vuelta del flujo de conexión con Microsoft (?msConnected=... / ?msError=...)
+    useEffect(() => {
+        const connected = searchParams.get('msConnected')
+        const error = searchParams.get('msError')
+        if (connected) { setMsMsg(`Cuenta conectada: ${connected}`); setTab('archivo') }
+        else if (error) { setMsMsg(`Error: ${error}`); setTab('archivo') }
+    }, [searchParams])
+
+    const handleRevisarCorreos = async () => {
+        setCheckingCorreos(true)
+        setMsMsg(null)
         try {
             const { data: { session } } = await supabase.auth.getSession()
-            const res = await fetch('/api/costos/variacion-sync', {
+            const res = await fetch('/api/costos/variacion-email-check', {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${session?.access_token}` }
             })
             const json = await res.json()
-            if (!res.ok) throw new Error(json.error || 'Error al sincronizar')
-            setSyncMsg(`Sincronizado correctamente: ${json.rows} filas`)
+            if (!res.ok) throw new Error(json.error || 'Error al revisar correos')
+            setMsMsg(`Correos nuevos: ${json.correosNuevos} · Filas insertadas: ${json.filasInsertadas}`)
             await fetchRows()
         } catch (err: any) {
-            setSyncMsg(`Error: ${err.message}`)
+            setMsMsg(`Error: ${err.message}`)
         } finally {
-            setSyncing(false)
+            setCheckingCorreos(false)
         }
+    }
+
+    const updateRow = async (id: string, field: 'estado' | 'obs_nl', value: string) => {
+        setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value || null } : r))
+        await supabase.schema('nexus').from('variacion_costos').update({ [field]: value || null }).eq('id', id)
     }
 
     const proveedores = useMemo(() => {
@@ -263,7 +307,8 @@ export default function VariacionCostosPage() {
 
     const filtered = useMemo(() => {
         return filteredBase.filter(r => {
-            if (vista === 'activos' && !(!r.estado || r.estado === 'En proceso')) return false
+            // "Activos" = todo lo que no esté cerrado (Finalizado / No aplica).
+            if (vista === 'activos' && (r.estado === 'Finalizado' || r.estado === 'No aplica')) return false
             if (fEstado === SIN_ESTADO ? !!r.estado : (fEstado && r.estado !== fEstado)) return false
             return true
         })
@@ -304,6 +349,9 @@ export default function VariacionCostosPage() {
     const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
     const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
+    const archivoTotalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
+    const archivoPageRows = rows.slice((archivoPage - 1) * PAGE_SIZE, archivoPage * PAGE_SIZE)
+
     const sectionStyle = { background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '1rem', padding: '1.5rem' }
 
     if (isAdmin === null || !user) {
@@ -329,242 +377,375 @@ export default function VariacionCostosPage() {
                 <ArrowLeft size={16} /> Volver a Módulo de Costos
             </Link>
 
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-                <div>
-                    <h1 style={{ margin: 0, fontSize: '1.4rem' }}>Variación de Costos</h1>
-                    <p style={{ margin: 0, fontSize: '0.8rem', color: 'hsl(var(--muted-foreground))' }}>
-                        Seguimiento a la fluctuación de precios de materias primas
-                        {ultimaSync && <> · Última actualización: {new Date(ultimaSync).toLocaleString('es-CO')}</>}
-                    </p>
-                </div>
-                <button className="action-btn" onClick={handleSync} disabled={syncing} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
-                    {syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                    {syncing ? 'Actualizando...' : 'Actualizar ahora'}
-                </button>
+            <div style={{ marginBottom: '1.5rem' }}>
+                <h1 style={{ margin: 0, fontSize: '1.4rem' }}>Variación de Costos</h1>
+                <p style={{ margin: 0, fontSize: '0.8rem', color: 'hsl(var(--muted-foreground))' }}>
+                    Seguimiento a la fluctuación de precios de materias primas
+                    {ultimaSync && <> · Última actualización: {new Date(ultimaSync).toLocaleString('es-CO')}</>}
+                </p>
             </div>
 
-            {syncMsg && (
-                <div style={{ marginBottom: '1rem', fontSize: '0.85rem', color: syncMsg.startsWith('Error') ? '#ef4444' : '#10b981' }}>{syncMsg}</div>
-            )}
-
-            {/* ── Toggle de vista ── */}
-            <div style={{ display: 'inline-flex', gap: '0.5rem', marginBottom: '1.25rem' }}>
+            {/* ── Pestañas ── */}
+            <div style={{ display: 'inline-flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
                 <button
                     className="action-btn"
-                    onClick={() => setVista('activos')}
-                    style={vista === 'activos' ? { background: 'hsl(var(--primary))', color: '#f5f1ea', borderColor: 'hsl(var(--primary))' } : {}}
+                    onClick={() => setTab('historico')}
+                    style={tab === 'historico' ? { background: 'hsl(var(--primary))', color: '#f5f1ea', borderColor: 'hsl(var(--primary))' } : {}}
                 >
-                    Activos (vacío / En proceso)
+                    Histórico Completo
                 </button>
                 <button
                     className="action-btn"
-                    onClick={() => setVista('todo')}
-                    style={vista === 'todo' ? { background: 'hsl(var(--primary))', color: '#f5f1ea', borderColor: 'hsl(var(--primary))' } : {}}
+                    onClick={() => setTab('archivo')}
+                    style={tab === 'archivo' ? { background: 'hsl(var(--primary))', color: '#f5f1ea', borderColor: 'hsl(var(--primary))' } : {}}
                 >
-                    Todo el histórico
+                    Visualizar Archivo
                 </button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
-                {[
-                    { icon: <PackageSearch size={16} style={{ opacity: 0.5 }} />, label: 'Registros (vista actual)', value: totalRegistros.toLocaleString('es-CO') },
-                    { icon: <TrendingUp size={16} color="#ef4444" />, label: 'Incrementos', value: incrementos.toLocaleString('es-CO'), color: '#ef4444' },
-                    { icon: <TrendingDown size={16} color="#10b981" />, label: 'Decrecimientos', value: decrementos.toLocaleString('es-CO'), color: '#10b981' },
-                    { icon: <AlertTriangle size={16} color="#f59e0b" />, label: 'Excluidos Finalizado', value: excluidosFinalizado.toLocaleString('es-CO') },
-                    { icon: <AlertTriangle size={16} color="#f59e0b" />, label: 'Excluidos No Aplica', value: excluidosNoAplica.toLocaleString('es-CO') },
-                    { icon: <AlertTriangle size={16} color="#ef4444" />, label: 'Posible Estancamiento', value: enSeguimientoEstancado.toLocaleString('es-CO'), color: enSeguimientoEstancado > 0 ? '#ef4444' : undefined },
-                ].map((k, i) => (
-                    <div key={i} className="stat-card card">
-                        {k.icon}
-                        <div style={{ flex: 1 }}>
-                            <div className="stat-label">{k.label}</div>
-                            <div className="stat-value" style={{ fontSize: '1.05rem', color: k.color }}>{k.value}</div>
+            {tab === 'historico' && (
+                <>
+                    {/* ── Toggle de vista ── */}
+                    <div style={{ display: 'inline-flex', gap: '0.5rem', marginBottom: '1.25rem' }}>
+                        <button
+                            className="action-btn"
+                            onClick={() => setVista('activos')}
+                            style={vista === 'activos' ? { background: 'hsl(var(--primary))', color: '#f5f1ea', borderColor: 'hsl(var(--primary))' } : {}}
+                        >
+                            Activos (no cerrados)
+                        </button>
+                        <button
+                            className="action-btn"
+                            onClick={() => setVista('todo')}
+                            style={vista === 'todo' ? { background: 'hsl(var(--primary))', color: '#f5f1ea', borderColor: 'hsl(var(--primary))' } : {}}
+                        >
+                            Todo el histórico
+                        </button>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                        {[
+                            { icon: <PackageSearch size={16} style={{ opacity: 0.5 }} />, label: 'Registros (vista actual)', value: totalRegistros.toLocaleString('es-CO') },
+                            { icon: <TrendingUp size={16} color="#ef4444" />, label: 'Incrementos', value: incrementos.toLocaleString('es-CO'), color: '#ef4444' },
+                            { icon: <TrendingDown size={16} color="#10b981" />, label: 'Decrecimientos', value: decrementos.toLocaleString('es-CO'), color: '#10b981' },
+                            { icon: <AlertTriangle size={16} color="#f59e0b" />, label: 'Excluidos Finalizado', value: excluidosFinalizado.toLocaleString('es-CO') },
+                            { icon: <AlertTriangle size={16} color="#f59e0b" />, label: 'Excluidos No Aplica', value: excluidosNoAplica.toLocaleString('es-CO') },
+                            { icon: <AlertTriangle size={16} color="#ef4444" />, label: 'Posible Estancamiento', value: enSeguimientoEstancado.toLocaleString('es-CO'), color: enSeguimientoEstancado > 0 ? '#ef4444' : undefined },
+                        ].map((k, i) => (
+                            <div key={i} className="stat-card card">
+                                {k.icon}
+                                <div style={{ flex: 1 }}>
+                                    <div className="stat-label">{k.label}</div>
+                                    <div className="stat-value" style={{ fontSize: '1.05rem', color: k.color }}>{k.value}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div style={{ ...sectionStyle, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                        <div>
+                            <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))' }}>Proveedor</label>
+                            <select className="form-control" value={fProveedor} onChange={e => setFProveedor(e.target.value)}>
+                                <option value="">Todos</option>
+                                {proveedores.map(([cod, nombre]) => <option key={cod} value={cod}>{nombre}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))' }}>Ítem (código o descripción)</label>
+                            <input className="form-control" value={fItem} onChange={e => setFItem(e.target.value)} placeholder="Buscar ítem..." />
+                        </div>
+                        <div>
+                            <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))' }}>Estado</label>
+                            <select className="form-control" value={fEstado} onChange={e => setFEstado(e.target.value)}>
+                                <option value="">Todos</option>
+                                <option value={SIN_ESTADO}>Sin estado</option>
+                                {estados.map(e => <option key={e} value={e}>{e}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))' }}>Desde</label>
+                            <input type="date" className="form-control" value={fDesde} onChange={e => setFDesde(e.target.value)} />
+                        </div>
+                        <div>
+                            <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))' }}>Hasta</label>
+                            <input type="date" className="form-control" value={fHasta} onChange={e => setFHasta(e.target.value)} />
                         </div>
                     </div>
-                ))}
-            </div>
 
-            <div style={{ ...sectionStyle, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
-                <div>
-                    <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))' }}>Proveedor</label>
-                    <select className="form-control" value={fProveedor} onChange={e => setFProveedor(e.target.value)}>
-                        <option value="">Todos</option>
-                        {proveedores.map(([cod, nombre]) => <option key={cod} value={cod}>{nombre}</option>)}
-                    </select>
-                </div>
-                <div>
-                    <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))' }}>Ítem (código o descripción)</label>
-                    <input className="form-control" value={fItem} onChange={e => setFItem(e.target.value)} placeholder="Buscar ítem..." />
-                </div>
-                <div>
-                    <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))' }}>Estado</label>
-                    <select className="form-control" value={fEstado} onChange={e => setFEstado(e.target.value)}>
-                        <option value="">Todos</option>
-                        <option value={SIN_ESTADO}>Sin estado</option>
-                        {estados.map(e => <option key={e} value={e}>{e}</option>)}
-                    </select>
-                </div>
-                <div>
-                    <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))' }}>Desde</label>
-                    <input type="date" className="form-control" value={fDesde} onChange={e => setFDesde(e.target.value)} />
-                </div>
-                <div>
-                    <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))' }}>Hasta</label>
-                    <input type="date" className="form-control" value={fHasta} onChange={e => setFHasta(e.target.value)} />
-                </div>
-            </div>
-
-            <div style={{ ...sectionStyle, marginBottom: '1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                    <h3 style={{ margin: 0, fontSize: '0.9rem' }}>Evolución de Precio por Ítem</h3>
-                    <ItemSearchSelect
-                        options={itemsUnicos}
-                        value={defaultItem}
-                        onChange={setSelectedItem}
-                        placeholder="Buscar ítem..."
-                    />
-                </div>
-                {loading || evolucionItem.length === 0 ? (
-                    <div style={{ height: 380, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: '0.85rem' }}>Sin datos para este ítem</div>
-                ) : (
-                    <ResponsiveContainer width="100%" height={380}>
-                        <LineChart data={evolucionItem} margin={{ top: 0, right: 0, left: 10, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                            <XAxis dataKey="fecha" tick={{ fontSize: 10 }} />
-                            <YAxis tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 10 }} />
-                            <Tooltip content={<CustomTooltip />} />
-                            <Legend wrapperStyle={{ fontSize: '0.75rem' }} />
-                            <Line type="monotone" dataKey="Precio" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
-                            <Line type="monotone" dataKey="Precio Prom. Almacén" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
-                        </LineChart>
-                    </ResponsiveContainer>
-                )}
-            </div>
-
-            <div style={{ ...sectionStyle, marginBottom: '1.5rem' }}>
-                <h3 style={{ margin: '0 0 1rem', fontSize: '0.9rem' }}>Distribución por Estado</h3>
-                <p style={{ margin: '0 0 1rem', fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))' }}>Haz clic en una porción para filtrar la tabla por ese estado.</p>
-                {loading || distribucionEstado.length === 0 ? (
-                    <div style={{ height: 240, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: '0.85rem' }}>Sin datos aún</div>
-                ) : (
-                    <ResponsiveContainer width="100%" height={240}>
-                        <PieChart>
-                            <Pie
-                                data={distribucionEstado}
-                                cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3}
-                                dataKey="value"
-                                label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
-                                labelLine={false}
-                                fontSize={10}
-                                cursor="pointer"
-                                onClick={(entry: any) => setFEstado(prev => prev === entry.name ? '' : entry.name)}
-                            >
-                                {distribucionEstado.map((entry, index) => (
-                                    <Cell
-                                        key={index}
-                                        fill={CHART_COLORS[index % CHART_COLORS.length]}
-                                        stroke={fEstado === entry.name ? 'hsl(var(--foreground))' : undefined}
-                                        strokeWidth={fEstado === entry.name ? 2 : 0}
-                                    />
-                                ))}
-                            </Pie>
-                            <Tooltip content={<CustomTooltip />} />
-                        </PieChart>
-                    </ResponsiveContainer>
-                )}
-            </div>
-
-            <div style={sectionStyle}>
-                <h2 style={{ margin: '0 0 1.25rem 0', fontSize: '1rem' }}>Detalle de Movimientos ({filtered.length.toLocaleString('es-CO')})</h2>
-                <div className="admin-table-container">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th></th><th>Fecha</th><th>Documento</th><th>Proveedor</th><th>Ítem</th>
-                                <th>Precio</th><th>Penúltimo Precio Prov.</th><th>% vs Penúltimo (mismo prov.)</th><th>Estado</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {loading ? (
-                                <tr><td colSpan={9} style={{ textAlign: 'center', padding: '2rem', opacity: 0.5 }}>Cargando...</td></tr>
-                            ) : pageRows.length === 0 ? (
-                                <tr><td colSpan={9} style={{ textAlign: 'center', padding: '2rem', opacity: 0.5 }}>No hay registros con estos filtros.</td></tr>
-                            ) : pageRows.map(r => {
-                                const pctReal = r.porc_vs_penultimo ?? r.porc_variacion
-                                const expanded = expandedId === r.id
-                                const origen = origenProveedor(r.cod_proveedor)
-                                const tablero = esTablero(r.descripcion_item)
-                                const estancado = r.estado === 'En proceso' && (r.revisiones_en_proceso || 0) >= ESTANCADO_UMBRAL
-                                return (
-                                    <Fragment key={r.id}>
-                                        <tr style={{ cursor: 'pointer' }} onClick={() => setExpandedId(expanded ? null : r.id)}>
-                                            <td>{expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</td>
-                                            <td style={{ fontSize: '0.8rem' }}>{r.fecha_correo ? new Date(r.fecha_correo).toLocaleDateString('es-CO') : '—'}</td>
-                                            <td style={{ fontSize: '0.8rem' }}>{r.numero_documento || '—'}</td>
-                                            <td style={{ fontSize: '0.8rem' }}>
-                                                {r.descripcion_proveedor || r.cod_proveedor || '—'}
-                                                {origen && (
-                                                    <span style={{ marginLeft: '0.4rem', fontSize: '0.65rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: '99px', background: `${ORIGEN_COLOR[origen]}18`, color: ORIGEN_COLOR[origen] }}>{origen}</span>
-                                                )}
-                                            </td>
-                                            <td style={{ fontSize: '0.8rem' }}>
-                                                {r.descripcion_item || r.cod_item || '—'}
-                                                {tablero && (
-                                                    <span style={{ marginLeft: '0.4rem', fontSize: '0.65rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: '99px', background: 'hsla(204, 38%, 24%, 0.1)', color: 'hsl(var(--primary))' }}>TABLERO</span>
-                                                )}
-                                            </td>
-                                            <td style={{ fontSize: '0.85rem' }}>{fmt(r.precio)}</td>
-                                            <td style={{ fontSize: '0.85rem' }}>{fmt(r.penultimo_precio_prov)}</td>
-                                            <td style={{ fontWeight: 600, fontSize: '0.85rem', color: (pctReal ?? 0) > 0 ? '#ef4444' : (pctReal ?? 0) < 0 ? '#10b981' : undefined }}>{fmtPct(pctReal)}</td>
-                                            <td>
-                                                {r.estado && <span className="badge badge-pending">{r.estado}</span>}
-                                                {estancado && (
-                                                    <span style={{ marginLeft: '0.4rem', display: 'inline-flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.65rem', fontWeight: 700, color: '#ef4444' }}>
-                                                        <AlertTriangle size={10} /> {r.revisiones_en_proceso}x
-                                                    </span>
-                                                )}
-                                            </td>
-                                        </tr>
-                                        {expanded && (
-                                            <tr>
-                                                <td colSpan={9} style={{ background: 'hsla(204, 38%, 24%, 0.03)' }}>
-                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>
-                                                        <div><strong>Tipo Documento:</strong> {r.tipo_documento || '—'}</div>
-                                                        <div><strong>Fecha Contabilización:</strong> {r.fecha_contabilizacion ? new Date(r.fecha_contabilizacion).toLocaleDateString('es-CO') : '—'}</div>
-                                                        <div><strong>Cod. Proveedor:</strong> {r.cod_proveedor || '—'}</div>
-                                                        <div><strong>Cod. Ítem:</strong> {r.cod_item || '—'}</div>
-                                                        <div><strong>% Variación general:</strong> {fmtPct(r.porc_variacion)}</div>
-                                                        <div><strong>Diferencia Precios (general):</strong> {fmt(r.diferencia_precios)}</div>
-                                                        <div><strong>Penúltimo Precio Prov.:</strong> {fmt(r.penultimo_precio_prov)}</div>
-                                                        <div><strong>Dif. vs Penúltimo:</strong> {fmt(r.dif_vs_penultimo_precio)}</div>
-                                                        <div><strong>Cantidad:</strong> {r.cantidad ?? '—'}</div>
-                                                        <div><strong>Total Línea (impacto):</strong> {fmt(r.total_linea)}</div>
-                                                        <div><strong>Precio en Lista SAP:</strong> {fmt(r.precio_lista_precios)}</div>
-                                                        <div><strong># Lista de Precio:</strong> {r.numero_lista_precio || '—'}</div>
-                                                        <div><strong>Responsable:</strong> {r.responsable || '—'}</div>
-                                                        <div><strong>Avoidance/Ahorro:</strong> {fmt(r.avoidance_ahorro)}</div>
-                                                        <div><strong>SI/NO:</strong> {r.si_no || '—'}</div>
-                                                        <div><strong>Sincronizaciones en proceso:</strong> {r.revisiones_en_proceso ?? 0}</div>
-                                                        <div style={{ gridColumn: '1 / -1' }}><strong>Observación:</strong> {r.obs_nl || '—'}</div>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </Fragment>
-                                )
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-
-                {totalPages > 1 && (
-                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginTop: '1rem' }}>
-                        <button className="action-btn" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>Anterior</button>
-                        <span style={{ fontSize: '0.85rem', opacity: 0.7 }}>Página {page} de {totalPages}</span>
-                        <button className="action-btn" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>Siguiente</button>
+                    <div style={{ ...sectionStyle, marginBottom: '1rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                            <h3 style={{ margin: 0, fontSize: '0.9rem' }}>Evolución de Precio por Ítem</h3>
+                            <ItemSearchSelect
+                                options={itemsUnicos}
+                                value={defaultItem}
+                                onChange={setSelectedItem}
+                                placeholder="Buscar ítem..."
+                            />
+                        </div>
+                        {loading || evolucionItem.length === 0 ? (
+                            <div style={{ height: 380, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: '0.85rem' }}>Sin datos para este ítem</div>
+                        ) : (
+                            <ResponsiveContainer width="100%" height={380}>
+                                <LineChart data={evolucionItem} margin={{ top: 0, right: 0, left: 10, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                    <XAxis dataKey="fecha" tick={{ fontSize: 10 }} />
+                                    <YAxis tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 10 }} />
+                                    <Tooltip content={<CustomTooltip />} />
+                                    <Legend wrapperStyle={{ fontSize: '0.75rem' }} />
+                                    <Line type="monotone" dataKey="Precio" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
+                                    <Line type="monotone" dataKey="Precio Prom. Almacén" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        )}
                     </div>
-                )}
-            </div>
+
+                    <div style={{ ...sectionStyle, marginBottom: '1.5rem' }}>
+                        <h3 style={{ margin: '0 0 1rem', fontSize: '0.9rem' }}>Distribución por Estado</h3>
+                        <p style={{ margin: '0 0 1rem', fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))' }}>Haz clic en una porción para filtrar la tabla por ese estado.</p>
+                        {loading || distribucionEstado.length === 0 ? (
+                            <div style={{ height: 240, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: '0.85rem' }}>Sin datos aún</div>
+                        ) : (
+                            <ResponsiveContainer width="100%" height={240}>
+                                <PieChart>
+                                    <Pie
+                                        data={distribucionEstado}
+                                        cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3}
+                                        dataKey="value"
+                                        label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                                        labelLine={false}
+                                        fontSize={10}
+                                        cursor="pointer"
+                                        onClick={(entry: any) => setFEstado(prev => prev === entry.name ? '' : entry.name)}
+                                    >
+                                        {distribucionEstado.map((entry, index) => (
+                                            <Cell
+                                                key={index}
+                                                fill={CHART_COLORS[index % CHART_COLORS.length]}
+                                                stroke={fEstado === entry.name ? 'hsl(var(--foreground))' : undefined}
+                                                strokeWidth={fEstado === entry.name ? 2 : 0}
+                                            />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip content={<CustomTooltip />} />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        )}
+                    </div>
+
+                    <div style={sectionStyle}>
+                        <h2 style={{ margin: '0 0 1.25rem 0', fontSize: '1rem' }}>Detalle de Movimientos ({filtered.length.toLocaleString('es-CO')})</h2>
+                        <div className="admin-table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th></th><th>Fecha</th><th>Documento</th><th>Proveedor</th><th>Ítem</th>
+                                        <th>Precio</th><th>Penúltimo Precio Prov.</th><th>% vs Penúltimo (mismo prov.)</th><th>Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {loading ? (
+                                        <tr><td colSpan={9} style={{ textAlign: 'center', padding: '2rem', opacity: 0.5 }}>Cargando...</td></tr>
+                                    ) : pageRows.length === 0 ? (
+                                        <tr><td colSpan={9} style={{ textAlign: 'center', padding: '2rem', opacity: 0.5 }}>No hay registros con estos filtros.</td></tr>
+                                    ) : pageRows.map(r => {
+                                        const pctReal = r.porc_vs_penultimo ?? r.porc_variacion
+                                        const expanded = expandedId === r.id
+                                        const origen = origenProveedor(r.cod_proveedor)
+                                        const tablero = esTablero(r.descripcion_item)
+                                        const estancado = r.estado === 'En proceso' && (r.revisiones_en_proceso || 0) >= ESTANCADO_UMBRAL
+                                        return (
+                                            <Fragment key={r.id}>
+                                                <tr style={{ cursor: 'pointer' }} onClick={() => setExpandedId(expanded ? null : r.id)}>
+                                                    <td>{expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</td>
+                                                    <td style={{ fontSize: '0.8rem' }}>{fmtDate(r.fecha_correo)}</td>
+                                                    <td style={{ fontSize: '0.8rem' }}>{r.numero_documento || '—'}</td>
+                                                    <td style={{ fontSize: '0.8rem' }}>
+                                                        {r.descripcion_proveedor || r.cod_proveedor || '—'}
+                                                        {origen && (
+                                                            <span style={{ marginLeft: '0.4rem', fontSize: '0.65rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: '99px', background: `${ORIGEN_COLOR[origen]}18`, color: ORIGEN_COLOR[origen] }}>{origen}</span>
+                                                        )}
+                                                    </td>
+                                                    <td style={{ fontSize: '0.8rem' }}>
+                                                        {r.descripcion_item || r.cod_item || '—'}
+                                                        {tablero && (
+                                                            <span style={{ marginLeft: '0.4rem', fontSize: '0.65rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: '99px', background: 'hsla(204, 38%, 24%, 0.1)', color: 'hsl(var(--primary))' }}>TABLERO</span>
+                                                        )}
+                                                    </td>
+                                                    <td style={{ fontSize: '0.85rem' }}>{fmt(r.precio)}</td>
+                                                    <td style={{ fontSize: '0.85rem' }}>{fmt(r.penultimo_precio_prov)}</td>
+                                                    <td style={{ fontWeight: 600, fontSize: '0.85rem', color: (pctReal ?? 0) > 0 ? '#ef4444' : (pctReal ?? 0) < 0 ? '#10b981' : undefined }}>{fmtPct(pctReal)}</td>
+                                                    <td>
+                                                        {r.estado && <span className="badge badge-pending">{r.estado}</span>}
+                                                        {estancado && (
+                                                            <span style={{ marginLeft: '0.4rem', display: 'inline-flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.65rem', fontWeight: 700, color: '#ef4444' }}>
+                                                                <AlertTriangle size={10} /> {r.revisiones_en_proceso}x
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                                {expanded && (
+                                                    <tr>
+                                                        <td colSpan={9} style={{ background: 'hsla(204, 38%, 24%, 0.03)' }}>
+                                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>
+                                                                <div><strong>Tipo Documento:</strong> {r.tipo_documento || '—'}</div>
+                                                                <div><strong>Fecha Contabilización:</strong> {fmtDate(r.fecha_contabilizacion)}</div>
+                                                                <div><strong>Cod. Proveedor:</strong> {r.cod_proveedor || '—'}</div>
+                                                                <div><strong>Cod. Ítem:</strong> {r.cod_item || '—'}</div>
+                                                                <div><strong>% Variación general:</strong> {fmtPct(r.porc_variacion)}</div>
+                                                                <div><strong>Diferencia Precios (general):</strong> {fmt(r.diferencia_precios)}</div>
+                                                                <div><strong>Penúltimo Precio Prov.:</strong> {fmt(r.penultimo_precio_prov)}</div>
+                                                                <div><strong>Dif. vs Penúltimo:</strong> {fmt(r.dif_vs_penultimo_precio)}</div>
+                                                                <div><strong>Cantidad:</strong> {r.cantidad ?? '—'}</div>
+                                                                <div><strong>Total Línea (impacto):</strong> {fmt(r.total_linea)}</div>
+                                                                <div><strong>Precio en Lista SAP:</strong> {fmt(r.precio_lista_precios)}</div>
+                                                                <div><strong># Lista de Precio:</strong> {r.numero_lista_precio || '—'}</div>
+                                                                <div><strong>Responsable:</strong> {r.responsable || '—'}</div>
+                                                                <div><strong>Avoidance/Ahorro:</strong> {fmt(r.avoidance_ahorro)}</div>
+                                                                <div><strong>SI/NO:</strong> {r.si_no || '—'}</div>
+                                                                <div><strong>Origen:</strong> {r.origen === 'correo' ? 'Correo' : 'Excel'}</div>
+                                                                <div><strong>Sincronizaciones en proceso:</strong> {r.revisiones_en_proceso ?? 0}</div>
+                                                                <div style={{ gridColumn: '1 / -1' }}><strong>Observación:</strong> {r.obs_nl || '—'}</div>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </Fragment>
+                                        )
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {totalPages > 1 && (
+                            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginTop: '1rem' }}>
+                                <button className="action-btn" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>Anterior</button>
+                                <span style={{ fontSize: '0.85rem', opacity: 0.7 }}>Página {page} de {totalPages}</span>
+                                <button className="action-btn" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>Siguiente</button>
+                            </div>
+                        )}
+                    </div>
+                </>
+            )}
+
+            {tab === 'archivo' && (
+                <>
+                    <div style={{ ...sectionStyle, marginBottom: '1.5rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                <div style={{ width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: msStatus?.connected ? 'rgba(16,185,129,0.1)' : 'hsla(204,38%,24%,0.08)', color: msStatus?.connected ? '#10b981' : 'hsl(var(--muted-foreground))' }}>
+                                    {msStatus?.connected ? <CheckCircle2 size={20} /> : <Mail size={20} />}
+                                </div>
+                                <div>
+                                    <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>
+                                        {msStatus?.connected ? `Conectado como ${msStatus.email}` : 'Cuenta de Microsoft no conectada'}
+                                    </div>
+                                    <div style={{ fontSize: '0.78rem', color: 'hsl(var(--muted-foreground))' }}>
+                                        {msStatus?.connected
+                                            ? `Expira: ${msStatus.expiresAt ? new Date(msStatus.expiresAt).toLocaleString('es-CO') : '—'} (se renueva sola)`
+                                            : 'Nallely debe conectar su cuenta para poder leer el correo de variación de costos.'}
+                                    </div>
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                                <a href="/api/auth/microsoft/login" className="action-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', textDecoration: 'none' }}>
+                                    <Link2 size={14} /> {msStatus?.connected ? 'Reconectar cuenta' : 'Conectar cuenta de Microsoft'}
+                                </a>
+                                <button className="action-btn" onClick={handleRevisarCorreos} disabled={checkingCorreos || !msStatus?.connected} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                                    {checkingCorreos ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}
+                                    {checkingCorreos ? 'Revisando...' : 'Revisar correos ahora'}
+                                </button>
+                            </div>
+                        </div>
+                        {msMsg && (
+                            <div style={{ marginTop: '1rem', fontSize: '0.85rem', color: msMsg.startsWith('Error') ? '#ef4444' : '#10b981' }}>{msMsg}</div>
+                        )}
+                    </div>
+
+                    <div style={sectionStyle}>
+                        <h2 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem' }}>Archivo Completo ({rows.length.toLocaleString('es-CO')} filas)</h2>
+                        <p style={{ margin: '0 0 1.25rem', fontSize: '0.78rem', color: 'hsl(var(--muted-foreground))' }}>
+                            Todas las columnas, sin filtrar. Edita Estado y Observaciones directamente aquí — se guardan al instante.
+                        </p>
+                        <div className="admin-table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Fecha Correo</th><th>Tipo Doc.</th><th># Doc.</th><th>Fecha Contab.</th>
+                                        <th>Cod. Prov.</th><th>Proveedor</th><th>Cod. Ítem</th><th>Ítem</th>
+                                        <th>Precio</th><th>Precio Prom.</th><th>Dif. Precios</th><th>% Variación</th>
+                                        <th>Penúltimo Precio</th><th>Dif. Penúltimo</th><th>% Penúltimo</th>
+                                        <th>Cantidad</th><th>Total Línea</th><th>Precio Lista</th><th># Lista</th>
+                                        <th style={{ minWidth: 180 }}>Observaciones</th><th>Responsable</th>
+                                        <th style={{ minWidth: 130 }}>Estado</th><th>Avoidance</th><th>SI/NO</th><th>Origen</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {loading ? (
+                                        <tr><td colSpan={24} style={{ textAlign: 'center', padding: '2rem', opacity: 0.5 }}>Cargando...</td></tr>
+                                    ) : archivoPageRows.length === 0 ? (
+                                        <tr><td colSpan={24} style={{ textAlign: 'center', padding: '2rem', opacity: 0.5 }}>Sin datos todavía.</td></tr>
+                                    ) : archivoPageRows.map(r => (
+                                        <tr key={r.id}>
+                                            <td style={{ fontSize: '0.78rem' }}>{fmtDate(r.fecha_correo)}</td>
+                                            <td style={{ fontSize: '0.78rem' }}>{r.tipo_documento || '—'}</td>
+                                            <td style={{ fontSize: '0.78rem' }}>{r.numero_documento || '—'}</td>
+                                            <td style={{ fontSize: '0.78rem' }}>{fmtDate(r.fecha_contabilizacion)}</td>
+                                            <td style={{ fontSize: '0.78rem' }}>{r.cod_proveedor || '—'}</td>
+                                            <td style={{ fontSize: '0.78rem' }}>{r.descripcion_proveedor || '—'}</td>
+                                            <td style={{ fontSize: '0.78rem' }}>{r.cod_item || '—'}</td>
+                                            <td style={{ fontSize: '0.78rem' }}>{r.descripcion_item || '—'}</td>
+                                            <td style={{ fontSize: '0.78rem' }}>{fmt(r.precio)}</td>
+                                            <td style={{ fontSize: '0.78rem' }}>{fmt(r.precio_prom_almacen)}</td>
+                                            <td style={{ fontSize: '0.78rem' }}>{fmt(r.diferencia_precios)}</td>
+                                            <td style={{ fontSize: '0.78rem' }}>{fmtPct(r.porc_variacion)}</td>
+                                            <td style={{ fontSize: '0.78rem' }}>{fmt(r.penultimo_precio_prov)}</td>
+                                            <td style={{ fontSize: '0.78rem' }}>{fmt(r.dif_vs_penultimo_precio)}</td>
+                                            <td style={{ fontSize: '0.78rem' }}>{fmtPct(r.porc_vs_penultimo)}</td>
+                                            <td style={{ fontSize: '0.78rem' }}>{r.cantidad ?? '—'}</td>
+                                            <td style={{ fontSize: '0.78rem' }}>{fmt(r.total_linea)}</td>
+                                            <td style={{ fontSize: '0.78rem' }}>{fmt(r.precio_lista_precios)}</td>
+                                            <td style={{ fontSize: '0.78rem' }}>{r.numero_lista_precio || '—'}</td>
+                                            <td>
+                                                <input
+                                                    key={`obs-${r.id}`}
+                                                    className="form-control"
+                                                    style={{ fontSize: '0.78rem', padding: '0.35rem 0.5rem', minWidth: 160 }}
+                                                    defaultValue={r.obs_nl || ''}
+                                                    placeholder="Sin observación"
+                                                    onBlur={e => { if (e.target.value !== (r.obs_nl || '')) updateRow(r.id, 'obs_nl', e.target.value) }}
+                                                />
+                                            </td>
+                                            <td style={{ fontSize: '0.78rem' }}>{r.responsable || '—'}</td>
+                                            <td>
+                                                <select
+                                                    className="form-control"
+                                                    style={{ fontSize: '0.78rem', padding: '0.35rem 0.5rem' }}
+                                                    value={r.estado || ''}
+                                                    onChange={e => updateRow(r.id, 'estado', e.target.value)}
+                                                >
+                                                    <option value="">— Vacío —</option>
+                                                    {ESTADOS_EDITABLES.map(e => <option key={e} value={e}>{e}</option>)}
+                                                </select>
+                                            </td>
+                                            <td style={{ fontSize: '0.78rem' }}>{fmt(r.avoidance_ahorro)}</td>
+                                            <td style={{ fontSize: '0.78rem' }}>{r.si_no || '—'}</td>
+                                            <td style={{ fontSize: '0.78rem' }}>{r.origen === 'correo' ? 'Correo' : 'Excel'}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {archivoTotalPages > 1 && (
+                            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginTop: '1rem' }}>
+                                <button className="action-btn" disabled={archivoPage <= 1} onClick={() => setArchivoPage(p => Math.max(1, p - 1))}>Anterior</button>
+                                <span style={{ fontSize: '0.85rem', opacity: 0.7 }}>Página {archivoPage} de {archivoTotalPages}</span>
+                                <button className="action-btn" disabled={archivoPage >= archivoTotalPages} onClick={() => setArchivoPage(p => Math.min(archivoTotalPages, p + 1))}>Siguiente</button>
+                            </div>
+                        )}
+                    </div>
+                </>
+            )}
         </div>
     )
 }

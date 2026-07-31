@@ -1,8 +1,8 @@
 {
     "crons": [
         {
-            "path": "/api/costos/variacion-sync",
-            "schedule": "0 5 * * *"
+            "path": "/api/costos/variacion-email-check",
+            "schedule": "30 14 * * *"
         }
     ]
 }
