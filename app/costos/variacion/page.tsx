@@ -60,6 +60,7 @@ const ORIGEN_COLOR: Record<string, string> = { Nacional: '#10b981', Exterior: '#
 const ESTANCADO_UMBRAL = 3
 const SIN_ESTADO = 'Sin estado'
 const ESTADOS_EDITABLES = ['Sin iniciar', 'En proceso', 'Finalizado', 'No aplica']
+const NALLELY_EMAIL = 'nallely.lopera@firplak.com'
 
 const fmt = (n: number | null | undefined) => n === null || n === undefined ? '—' : `$${Math.round(n).toLocaleString('es-CO')}`
 const fmtPct = (n: number | null | undefined) => n === null || n === undefined ? '—' : `${(n * 100).toFixed(1)}%`
@@ -204,6 +205,8 @@ function VariacionCostosContent() {
     const [fDesde, setFDesde] = useState('')
     const [fHasta, setFHasta] = useState('')
     const [selectedItem, setSelectedItem] = useState('')
+
+    const esNallely = (user?.email || '').toLowerCase() === NALLELY_EMAIL
 
     useEffect(() => {
         const init = async () => {
@@ -646,10 +649,18 @@ function VariacionCostosContent() {
                                     </div>
                                 </div>
                             </div>
-                            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                                <a href="/api/auth/microsoft/login" className="action-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', textDecoration: 'none' }}>
-                                    <Link2 size={14} /> {msStatus?.connected ? 'Reconectar cuenta' : 'Conectar cuenta de Microsoft'}
-                                </a>
+                            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                                {esNallely ? (
+                                    <a href="/api/auth/microsoft/login" className="action-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', textDecoration: 'none' }}>
+                                        <Link2 size={14} /> {msStatus?.connected ? 'Reconectar cuenta' : 'Conectar cuenta de Microsoft'}
+                                    </a>
+                                ) : (
+                                    !msStatus?.connected && (
+                                        <span style={{ fontSize: '0.78rem', color: 'hsl(var(--muted-foreground))', fontStyle: 'italic' }}>
+                                            Solo nallely.lopera@firplak.com puede conectar esta cuenta
+                                        </span>
+                                    )
+                                )}
                                 <button className="action-btn" onClick={handleRevisarCorreos} disabled={checkingCorreos || !msStatus?.connected} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
                                     {checkingCorreos ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}
                                     {checkingCorreos ? 'Revisando...' : 'Revisar correos ahora'}
