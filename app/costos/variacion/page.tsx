@@ -66,25 +66,31 @@ const fmt = (n: number | null | undefined) => n === null || n === undefined ? '�
 const fmtPct = (n: number | null | undefined) => n === null || n === undefined ? '—' : `${(n * 100).toFixed(1)}%`
 const fmtDate = (d: string | null) => d ? new Date(d).toLocaleDateString('es-CO') : '—'
 
+// Texto tal como se ve en la celda (sin forzar minúsculas) — se usa para armar la
+// lista de valores únicos por columna que ofrece el selector de filtro.
+function archivoCellDisplay(r: VariacionRow, key: string): string {
+    switch (key) {
+        case 'fecha_correo': return fmtDate(r.fecha_correo) === '—' ? '' : fmtDate(r.fecha_correo)
+        case 'fecha_contabilizacion': return fmtDate(r.fecha_contabilizacion) === '—' ? '' : fmtDate(r.fecha_contabilizacion)
+        case 'precio': return fmt(r.precio) === '—' ? '' : fmt(r.precio)
+        case 'precio_prom_almacen': return fmt(r.precio_prom_almacen) === '—' ? '' : fmt(r.precio_prom_almacen)
+        case 'diferencia_precios': return fmt(r.diferencia_precios) === '—' ? '' : fmt(r.diferencia_precios)
+        case 'porc_variacion': return fmtPct(r.porc_variacion) === '—' ? '' : fmtPct(r.porc_variacion)
+        case 'penultimo_precio_prov': return fmt(r.penultimo_precio_prov) === '—' ? '' : fmt(r.penultimo_precio_prov)
+        case 'dif_vs_penultimo_precio': return fmt(r.dif_vs_penultimo_precio) === '—' ? '' : fmt(r.dif_vs_penultimo_precio)
+        case 'porc_vs_penultimo': return fmtPct(r.porc_vs_penultimo) === '—' ? '' : fmtPct(r.porc_vs_penultimo)
+        case 'cantidad': return (r.cantidad ?? '').toString()
+        case 'total_linea': return fmt(r.total_linea) === '—' ? '' : fmt(r.total_linea)
+        case 'precio_lista_precios': return fmt(r.precio_lista_precios) === '—' ? '' : fmt(r.precio_lista_precios)
+        case 'origen': return r.origen === 'correo' ? 'Correo' : 'Excel'
+        default: return ((r as any)[key] ?? '').toString()
+    }
+}
+
 // Texto en minúsculas de una columna del archivo, usado para el filtro por columna
 // (compara contra lo mismo que se ve renderizado, no el valor crudo).
 function archivoCellText(r: VariacionRow, key: string): string {
-    switch (key) {
-        case 'fecha_correo': return fmtDate(r.fecha_correo).toLowerCase()
-        case 'fecha_contabilizacion': return fmtDate(r.fecha_contabilizacion).toLowerCase()
-        case 'precio': return fmt(r.precio).toLowerCase()
-        case 'precio_prom_almacen': return fmt(r.precio_prom_almacen).toLowerCase()
-        case 'diferencia_precios': return fmt(r.diferencia_precios).toLowerCase()
-        case 'porc_variacion': return fmtPct(r.porc_variacion).toLowerCase()
-        case 'penultimo_precio_prov': return fmt(r.penultimo_precio_prov).toLowerCase()
-        case 'dif_vs_penultimo_precio': return fmt(r.dif_vs_penultimo_precio).toLowerCase()
-        case 'porc_vs_penultimo': return fmtPct(r.porc_vs_penultimo).toLowerCase()
-        case 'cantidad': return (r.cantidad ?? '').toString().toLowerCase()
-        case 'total_linea': return fmt(r.total_linea).toLowerCase()
-        case 'precio_lista_precios': return fmt(r.precio_lista_precios).toLowerCase()
-        case 'origen': return (r.origen === 'correo' ? 'correo' : 'excel')
-        default: return ((r as any)[key] ?? '').toString().toLowerCase()
-    }
+    return archivoCellDisplay(r, key).toLowerCase()
 }
 
 function esTablero(descripcion: string | null): boolean {
@@ -171,6 +177,65 @@ function ItemSearchSelect({ options, value, onChange, placeholder }: {
                             ))
                         ) : (
                             <div className="no-results">No se encontraron resultados</div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
+// Filtro por columna de la tabla "Visualizar Archivo": lista de valores existentes
+// en esa columna, con buscador — en vez de texto libre.
+function ColumnFilterSelect({ options, value, onChange }: {
+    options: string[]
+    value: string
+    onChange: (val: string) => void
+}) {
+    const [isOpen, setIsOpen] = useState(false)
+    const [searchTerm, setSearchTerm] = useState('')
+    const containerRef = useRef<HTMLDivElement>(null)
+
+    const filtered = options.filter(o => o.toLowerCase().includes(searchTerm.toLowerCase()))
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (containerRef.current && !containerRef.current.contains(event.target as Node)) setIsOpen(false)
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [])
+
+    return (
+        <div className="col-filter" ref={containerRef}>
+            <div className={`col-filter-trigger ${isOpen ? 'active' : ''} ${value ? 'has-value' : ''}`} onClick={() => setIsOpen(!isOpen)}>
+                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value || 'Filtrar...'}</span>
+                {value ? (
+                    <X size={12} className="col-filter-clear" onClick={e => { e.stopPropagation(); onChange(''); setSearchTerm('') }} />
+                ) : (
+                    <Search size={12} className="col-filter-icon" />
+                )}
+            </div>
+            {isOpen && (
+                <div className="col-filter-dropdown animate-fade-in">
+                    <input
+                        type="text"
+                        className="col-filter-search"
+                        placeholder="Buscar..."
+                        autoFocus
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        onClick={e => e.stopPropagation()}
+                    />
+                    <div className="col-filter-options">
+                        {filtered.length > 0 ? (
+                            filtered.slice(0, 300).map(o => (
+                                <div key={o} className={`col-filter-option ${o === value ? 'selected' : ''}`} onClick={() => { onChange(o); setIsOpen(false); setSearchTerm('') }}>
+                                    {o}
+                                </div>
+                            ))
+                        ) : (
+                            <div className="col-filter-empty">Sin resultados</div>
                         )}
                     </div>
                 </div>
@@ -374,6 +439,27 @@ function VariacionCostosContent() {
 
     const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
     const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
+    const ARCHIVO_FILTER_COLUMNS = [
+        'fecha_correo', 'tipo_documento', 'numero_documento', 'fecha_contabilizacion',
+        'cod_proveedor', 'descripcion_proveedor', 'cod_item', 'descripcion_item',
+        'precio', 'precio_prom_almacen', 'diferencia_precios', 'porc_variacion',
+        'penultimo_precio_prov', 'dif_vs_penultimo_precio', 'porc_vs_penultimo',
+        'cantidad', 'total_linea', 'precio_lista_precios', 'numero_lista_precio', 'obs_nl'
+    ] as const
+
+    const archivoColumnOptions = useMemo(() => {
+        const map: Record<string, string[]> = {}
+        ARCHIVO_FILTER_COLUMNS.forEach(key => {
+            const set = new Set<string>()
+            rows.forEach(r => {
+                const raw = archivoCellDisplay(r, key)
+                if (raw) set.add(raw)
+            })
+            map[key] = Array.from(set).sort()
+        })
+        return map
+    }, [rows])
 
     const archivoFilteredRows = useMemo(() => {
         const activos = Object.entries(archivoFilters).filter(([, v]) => v.trim() !== '')
@@ -738,46 +824,28 @@ function VariacionCostosContent() {
                                         <th style={{ minWidth: 130 }}>Estado</th><th>Origen</th>
                                     </tr>
                                     <tr>
-                                        {[
-                                            'fecha_correo', 'tipo_documento', 'numero_documento', 'fecha_contabilizacion',
-                                            'cod_proveedor', 'descripcion_proveedor', 'cod_item', 'descripcion_item',
-                                            'precio', 'precio_prom_almacen', 'diferencia_precios', 'porc_variacion',
-                                            'penultimo_precio_prov', 'dif_vs_penultimo_precio', 'porc_vs_penultimo',
-                                            'cantidad', 'total_linea', 'precio_lista_precios', 'numero_lista_precio',
-                                            'obs_nl'
-                                        ].map(key => (
+                                        {ARCHIVO_FILTER_COLUMNS.map(key => (
                                             <th key={key} style={{ padding: '0.3rem' }}>
-                                                <input
-                                                    className="form-control"
-                                                    style={{ fontSize: '0.7rem', padding: '0.25rem 0.4rem', width: '100%' }}
-                                                    placeholder="Filtrar..."
+                                                <ColumnFilterSelect
+                                                    options={archivoColumnOptions[key] || []}
                                                     value={archivoFilters[key] || ''}
-                                                    onChange={e => setArchivoFilters(prev => ({ ...prev, [key]: e.target.value }))}
+                                                    onChange={v => setArchivoFilters(prev => ({ ...prev, [key]: v }))}
                                                 />
                                             </th>
                                         ))}
                                         <th style={{ padding: '0.3rem' }}>
-                                            <select
-                                                className="form-control"
-                                                style={{ fontSize: '0.7rem', padding: '0.25rem 0.4rem', width: '100%' }}
+                                            <ColumnFilterSelect
+                                                options={ESTADOS_EDITABLES}
                                                 value={archivoFilters.estado || ''}
-                                                onChange={e => setArchivoFilters(prev => ({ ...prev, estado: e.target.value }))}
-                                            >
-                                                <option value="">Todos</option>
-                                                {ESTADOS_EDITABLES.map(e => <option key={e} value={e.toLowerCase()}>{e}</option>)}
-                                            </select>
+                                                onChange={v => setArchivoFilters(prev => ({ ...prev, estado: v }))}
+                                            />
                                         </th>
                                         <th style={{ padding: '0.3rem' }}>
-                                            <select
-                                                className="form-control"
-                                                style={{ fontSize: '0.7rem', padding: '0.25rem 0.4rem', width: '100%' }}
+                                            <ColumnFilterSelect
+                                                options={['Correo', 'Excel']}
                                                 value={archivoFilters.origen || ''}
-                                                onChange={e => setArchivoFilters(prev => ({ ...prev, origen: e.target.value }))}
-                                            >
-                                                <option value="">Todos</option>
-                                                <option value="correo">Correo</option>
-                                                <option value="excel">Excel</option>
-                                            </select>
+                                                onChange={v => setArchivoFilters(prev => ({ ...prev, origen: v }))}
+                                            />
                                         </th>
                                     </tr>
                                 </thead>
