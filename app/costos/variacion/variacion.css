@@ -73,3 +73,66 @@
 .option-item:hover { background: hsla(204, 38%, 24%, 0.06); }
 .option-item.selected { background: hsl(var(--primary)); color: #f5f1ea; }
 .no-results { padding: 0.65rem; font-size: 0.85rem; color: hsl(var(--muted-foreground)); text-align: center; }
+
+/* ─── Filtro por columna (tabla Visualizar Archivo) — azul vivo, no gris ─── */
+.col-filter { position: relative; width: 100%; }
+.col-filter-trigger {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.32rem 0.5rem;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.4rem;
+    color: hsl(var(--muted-foreground));
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.col-filter-trigger:hover { border-color: #6366f1; }
+.col-filter-trigger.active { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18); }
+.col-filter-trigger.has-value { border-color: #6366f1; background: rgba(99, 102, 241, 0.1); color: #4338ca; font-weight: 600; }
+.col-filter-icon { color: #a5a6f6; flex-shrink: 0; }
+.col-filter-clear { color: #6366f1; flex-shrink: 0; }
+.col-filter-clear:hover { color: #4338ca; }
+.col-filter-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 190px;
+    background: hsl(var(--card));
+    border: 1px solid #6366f1;
+    border-radius: 0.5rem;
+    box-shadow: 0 12px 28px -6px rgba(99, 102, 241, 0.3);
+    z-index: 200;
+    padding: 0.4rem;
+    max-height: 260px;
+    display: flex;
+    flex-direction: column;
+}
+.col-filter-search {
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.35rem;
+    padding: 0.32rem 0.5rem;
+    font-size: 0.75rem;
+    margin-bottom: 0.35rem;
+    outline: none;
+    color: hsl(var(--foreground));
+    background: hsl(var(--card));
+}
+.col-filter-search:focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15); }
+.col-filter-options { overflow-y: auto; max-height: 200px; }
+.col-filter-option {
+    padding: 0.35rem 0.55rem;
+    font-size: 0.75rem;
+    border-radius: 0.3rem;
+    cursor: pointer;
+    color: hsl(var(--foreground));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.col-filter-option:hover { background: rgba(99, 102, 241, 0.12); }
+.col-filter-option.selected { background: #6366f1; color: #fff; }
+.col-filter-empty { padding: 0.4rem; font-size: 0.75rem; color: hsl(var(--muted-foreground)); text-align: center; }
