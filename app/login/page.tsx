@@ -31,7 +31,8 @@ export default function LoginPage() {
             'aprendiz.desarrollo@firplak.com', 
             'nallely.lopera@firplak.com', 
             'milton.rendon@firplak.com',
-            'alejandro.fernandez@firplak.com'
+            'alejandro.fernandez@firplak.com',
+            'isabel.isaza@firplak.com'
         ]
         const assignedRole = adminEmails.includes(emailStr.trim().toLowerCase()) ? 'ADMIN' : 'SOLICITANTE'
 
@@ -66,6 +67,15 @@ export default function LoginPage() {
                     }
                 })
                 if (error) throw error
+
+                // Si el correo ya tenía una cuenta, Supabase responde "éxito" sin crear nada
+                // nuevo ni tocar la contraseña (para no revelar qué correos existen) — hay
+                // que detectarlo explícitamente o el usuario cree que quedó registrado.
+                if (data.user && data.user.identities && data.user.identities.length === 0) {
+                    setError('Este correo ya tiene una cuenta. Si no recuerdas tu contraseña, usa "¿Olvidaste tu contraseña?".')
+                    setView('login')
+                    return
+                }
 
                 if (data.user) {
                     await syncProfile(data.user, email)
