@@ -431,6 +431,9 @@ export default function NewRequestPage() {
                                     <option value="PTO">PTO</option>
                                     <option value="COMPRA_UNICA">Compra Única</option>
                                 </select>
+                                <p style={{ margin: '0.4rem 0 0', fontSize: '0.75rem', color: 'rgba(37, 65, 83, 0.6)', lineHeight: 1.4 }}>
+                                    <strong>PTS</strong> = Purchase To Stock (compra con stock) · <strong>PTO</strong> = Purchase To Order (compra bajo orden) · <strong>Compra Única</strong> = compra puntual, no recurrente.
+                                </p>
                             </div>
                         </div>
                     </section>

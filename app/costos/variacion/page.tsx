@@ -284,6 +284,7 @@ function VariacionCostosContent() {
     const [checkingCorreos, setCheckingCorreos] = useState(false)
     const [archivoPage, setArchivoPage] = useState(1)
     const [archivoFilters, setArchivoFilters] = useState<Record<string, string>>({})
+    const [archivoSortTotalLinea, setArchivoSortTotalLinea] = useState<'asc' | 'desc' | null>(null)
 
     const [vista, setVista] = useState<'activos' | 'todo'>('activos')
     const [fProveedor, setFProveedor] = useState('')
@@ -328,7 +329,7 @@ function VariacionCostosContent() {
     }, [isAdmin])
 
     useEffect(() => { setPage(1) }, [vista, fProveedor, fEstado, fItem, fDesde, fHasta])
-    useEffect(() => { setArchivoPage(1) }, [archivoFilters])
+    useEffect(() => { setArchivoPage(1) }, [archivoFilters, archivoSortTotalLinea])
 
     // Mensajes de vuelta del flujo de conexión con Microsoft (?msConnected=... / ?msError=...)
     useEffect(() => {
@@ -467,8 +468,17 @@ function VariacionCostosContent() {
         return rows.filter(r => activos.every(([key, val]) => archivoCellText(r, key).includes(val.toLowerCase())))
     }, [rows, archivoFilters])
 
-    const archivoTotalPages = Math.max(1, Math.ceil(archivoFilteredRows.length / PAGE_SIZE))
-    const archivoPageRows = archivoFilteredRows.slice((archivoPage - 1) * PAGE_SIZE, archivoPage * PAGE_SIZE)
+    const archivoSortedRows = useMemo(() => {
+        if (!archivoSortTotalLinea) return archivoFilteredRows
+        return [...archivoFilteredRows].sort((a, b) => {
+            const av = a.total_linea ?? -Infinity
+            const bv = b.total_linea ?? -Infinity
+            return archivoSortTotalLinea === 'asc' ? av - bv : bv - av
+        })
+    }, [archivoFilteredRows, archivoSortTotalLinea])
+
+    const archivoTotalPages = Math.max(1, Math.ceil(archivoSortedRows.length / PAGE_SIZE))
+    const archivoPageRows = archivoSortedRows.slice((archivoPage - 1) * PAGE_SIZE, archivoPage * PAGE_SIZE)
 
     const sectionStyle = { background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '1rem', padding: '1.5rem' }
 
@@ -819,7 +829,18 @@ function VariacionCostosContent() {
                                         <th>Cod. Prov.</th><th>Proveedor</th><th>Cod. Ítem</th><th>Ítem</th>
                                         <th>Precio</th><th>Precio Prom.</th><th>Dif. Precios</th><th>% Variación</th>
                                         <th>Penúltimo Precio</th><th>Dif. Penúltimo</th><th>% Penúltimo</th>
-                                        <th>Cantidad</th><th>Total Línea</th><th>Precio Lista</th><th># Lista</th>
+                                        <th>Cantidad</th>
+                                        <th
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                            onClick={() => setArchivoSortTotalLinea(s => s === 'desc' ? 'asc' : s === 'asc' ? null : 'desc')}
+                                            title="Ordenar por Total Línea"
+                                        >
+                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                                Total Línea
+                                                {archivoSortTotalLinea === 'desc' ? <ChevronDown size={12} /> : archivoSortTotalLinea === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} style={{ opacity: 0.25 }} />}
+                                            </span>
+                                        </th>
+                                        <th>Precio Lista</th><th># Lista</th>
                                         <th style={{ minWidth: 180 }}>Observaciones</th>
                                         <th style={{ minWidth: 130 }}>Estado</th><th>Origen</th>
                                     </tr>
@@ -870,7 +891,7 @@ function VariacionCostosContent() {
                                             <td style={{ fontSize: '0.78rem' }}>{fmtPct(r.porc_variacion)}</td>
                                             <td style={{ fontSize: '0.78rem' }}>{fmt(r.penultimo_precio_prov)}</td>
                                             <td style={{ fontSize: '0.78rem' }}>{fmt(r.dif_vs_penultimo_precio)}</td>
-                                            <td style={{ fontSize: '0.78rem' }}>{fmtPct(r.porc_vs_penultimo)}</td>
+                                            <td style={{ fontSize: '0.78rem', fontWeight: 600, color: (r.porc_vs_penultimo ?? 0) > 0 ? '#ef4444' : (r.porc_vs_penultimo ?? 0) < 0 ? '#10b981' : undefined }}>{fmtPct(r.porc_vs_penultimo)}</td>
                                             <td style={{ fontSize: '0.78rem' }}>{r.cantidad ?? '—'}</td>
                                             <td style={{ fontSize: '0.78rem' }}>{fmt(r.total_linea)}</td>
                                             <td style={{ fontSize: '0.78rem' }}>{fmt(r.precio_lista_precios)}</td>
