@@ -129,7 +129,7 @@ function RevisionPanel({ muestra, userId, supabase, empleados, onRefresh, onClos
                     folderPath: '/Shared Documents/Evidencias Homologacion de productos'
                 })
             })
-            if (!uploadRes.ok) throw new Error('No se pudo subir la evidencia a SharePoint')
+            if (!uploadRes.ok) throw new Error('No se pudo subir la evidencia')
             const uploadData = await uploadRes.json()
 
             const aprobador = aprobadorOptions.find((o: any) => o.id === aprobadorEmail)
