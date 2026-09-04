@@ -3,6 +3,18 @@ import { createClient } from '@supabase/supabase-js'
 
 const BUCKET_NAME = 'muestras_documentos'
 
+const MIME_TYPES: Record<string, string> = {
+    pdf: 'application/pdf',
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    webp: 'image/webp',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+}
+
 function createAdminClient() {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -56,15 +68,16 @@ export async function POST(req: NextRequest) {
             .replace(/[^a-z0-9]+/g, '-')
             .replace(/^-+|-+$/g, '')
 
-        const ext = fileName.includes('.') ? fileName.split('.').pop() : ''
+        const ext = fileName.includes('.') ? (fileName.split('.').pop() ?? '') : ''
         const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext ? `.${ext}` : ''}`
         const filePath = folderSlug ? `${folderSlug}/${uniqueName}` : uniqueName
 
         const binary = Buffer.from(fileContent, 'base64')
+        const contentType = MIME_TYPES[ext.toLowerCase()] ?? 'application/octet-stream'
 
         const { error: uploadError } = await supabaseAdmin.storage
             .from(BUCKET_NAME)
-            .upload(filePath, binary, { upsert: false })
+            .upload(filePath, binary, { contentType, upsert: false })
 
         if (uploadError) {
             throw new Error(`Error al subir archivo: ${uploadError.message}`)
