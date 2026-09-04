@@ -100,7 +100,7 @@ export default function NuevaMuestraPage() {
         })
     }
 
-    const uploadToSharePoint = async (
+    const uploadDocumento = async (
         file: File,
         folderPath: string
     ): Promise<string | null> => {
@@ -128,19 +128,19 @@ export default function NuevaMuestraPage() {
         setError(null)
 
         try {
-            // 1. Subir Ficha Técnica a SharePoint (si existe)
+            // 1. Subir Ficha Técnica (si existe)
             let fichaTecnicaUrl: string | null = null
             if (fichaTecnica) {
-                fichaTecnicaUrl = await uploadToSharePoint(
+                fichaTecnicaUrl = await uploadDocumento(
                     fichaTecnica,
                     '/Shared Documents/Fichas Tec Homologacion de productos'
                 )
             }
 
-            // 2. Subir Evidencia a SharePoint (si existe)
+            // 2. Subir Evidencia (si existe)
             let evidenciaUrl: string | null = null
             if (evidencia) {
-                evidenciaUrl = await uploadToSharePoint(
+                evidenciaUrl = await uploadDocumento(
                     evidencia,
                     '/Shared Documents/Evidencias Homologacion de productos'
                 )
@@ -414,7 +414,7 @@ export default function NuevaMuestraPage() {
 
                         <div className="info-banner">
                             <Info size={16} />
-                            <span>Los documentos se cargarán automáticamente al SharePoint de <strong>Desarrollo de Productos</strong>.</span>
+                            <span>Los documentos se cargarán automáticamente al repositorio de <strong>Desarrollo de Productos</strong>.</span>
                         </div>
 
                         {/* Ficha Técnica */}

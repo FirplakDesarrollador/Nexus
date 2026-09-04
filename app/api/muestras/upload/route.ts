@@ -1,56 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
-const TENANT_ID    = process.env.MICROSOFT_GRAPH_TENANT_ID!
-const CLIENT_ID    = process.env.MICROSOFT_GRAPH_CLIENT_ID!
-const CLIENT_SECRET= process.env.MICROSOFT_GRAPH_CLIENT_SECRET!
+const BUCKET_NAME = 'muestras_documentos'
 
-const SITE_URL = 'https://firplaksa.sharepoint.com/sites/DESARROLLODEPRODUCTOS'
-
-async function getAccessToken(): Promise<string> {
-    const tokenUrl = `https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`
-    const body = new URLSearchParams({
-        grant_type: 'client_credentials',
-        client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET,
-        scope: 'https://graph.microsoft.com/.default'
-    })
-    const res = await fetch(tokenUrl, { method: 'POST', body })
-    if (!res.ok) {
-        const err = await res.text()
-        throw new Error(`Token error: ${err}`)
+function createAdminClient() {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+    if (!serviceKey || serviceKey === 'tu_service_role_key_aqui') {
+        throw new Error('SUPABASE_SERVICE_ROLE_KEY no está configurado en .env')
     }
-    const json = await res.json()
-    return json.access_token
+    return createClient(url, serviceKey, {
+        auth: { persistSession: false }
+    })
 }
 
-async function getSiteId(token: string): Promise<string> {
-    // Extraer host y serverRelativePath del SITE_URL
-    const url = new URL(SITE_URL)
-    const host = url.hostname                           // firplaksa.sharepoint.com
-    const sitePath = url.pathname                       // /sites/DESARROLLODEPRODUCTOS
-
-    const res = await fetch(
-        `https://graph.microsoft.com/v1.0/sites/${host}:${sitePath}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-    )
-    if (!res.ok) throw new Error('No se pudo obtener el Site ID de SharePoint')
-    const json = await res.json()
-    return json.id
-}
-
-async function getDriveId(token: string, siteId: string): Promise<string> {
-    const res = await fetch(
-        `https://graph.microsoft.com/v1.0/sites/${siteId}/drives`,
-        { headers: { Authorization: `Bearer ${token}` } }
-    )
-    if (!res.ok) throw new Error('No se pudo listar los drives del sitio')
-    const json = await res.json()
-    // Obtener el drive principal "Documents"
-    const drive = json.value.find((d: any) =>
-        d.name === 'Documents' || d.name === 'Shared Documents' || d.driveType === 'documentLibrary'
-    ) ?? json.value[0]
-    if (!drive) throw new Error('No se encontró un drive válido en el sitio')
-    return drive.id
+async function ensureBucket(supabaseAdmin: ReturnType<typeof createAdminClient>) {
+    const { data: buckets } = await supabaseAdmin.storage.listBuckets()
+    const bucketExists = buckets?.some(b => b.name === BUCKET_NAME)
+    if (!bucketExists) {
+        await supabaseAdmin.storage.createBucket(BUCKET_NAME, {
+            public: true,
+            fileSizeLimit: 52428800, // 50MB
+            allowedMimeTypes: [
+                'application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 'image/webp',
+                'application/msword',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'application/vnd.ms-excel',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            ]
+        })
+    }
 }
 
 export async function POST(req: NextRequest) {
@@ -66,45 +45,39 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Faltan parámetros' }, { status: 400 })
         }
 
-        const token = await getAccessToken()
-        const siteId = await getSiteId(token)
-        const driveId = await getDriveId(token, siteId)
+        const supabaseAdmin = createAdminClient()
+        await ensureBucket(supabaseAdmin)
 
-        // Convertir base64 a binario
+        // Deriva una subcarpeta corta y legible a partir del folderPath heredado de SharePoint
+        const folderSlug = folderPath
+            .toLowerCase()
+            .replace(/^\/shared documents\//, '')
+            .replace(/^\/documents\//, '')
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '')
+
+        const ext = fileName.includes('.') ? fileName.split('.').pop() : ''
+        const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext ? `.${ext}` : ''}`
+        const filePath = folderSlug ? `${folderSlug}/${uniqueName}` : uniqueName
+
         const binary = Buffer.from(fileContent, 'base64')
 
-        // Carpeta relativa al drive: quitar el prefijo '/Shared Documents'
-        const relativePath = folderPath
-            .replace(/^\/Shared Documents/, '')
-            .replace(/^\/Documents/, '')
+        const { error: uploadError } = await supabaseAdmin.storage
+            .from(BUCKET_NAME)
+            .upload(filePath, binary, { upsert: false })
 
-        // Construir la ruta de upload con carpeta relativa
-        const uploadPath = relativePath
-            ? `${relativePath}/${fileName}`
-            : `/${fileName}`
-
-        // PUT simple upload (hasta 4MB — para archivos más grandes usar upload session)
-        const uploadUrl = `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${uploadPath}:/content`
-
-        const uploadRes = await fetch(uploadUrl, {
-            method: 'PUT',
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/octet-stream'
-            },
-            body: binary
-        })
-
-        if (!uploadRes.ok) {
-            const err = await uploadRes.text()
-            throw new Error(`Error al subir archivo: ${err}`)
+        if (uploadError) {
+            throw new Error(`Error al subir archivo: ${uploadError.message}`)
         }
 
-        const uploaded = await uploadRes.json()
+        const { data: publicUrlData } = supabaseAdmin.storage
+            .from(BUCKET_NAME)
+            .getPublicUrl(filePath)
+
         return NextResponse.json({
-            url: uploaded.webUrl ?? `${SITE_URL}${folderPath}/${fileName}`,
-            name: uploaded.name,
-            size: uploaded.size
+            url: publicUrlData.publicUrl,
+            name: fileName,
+            size: binary.length
         })
 
     } catch (err: any) {
