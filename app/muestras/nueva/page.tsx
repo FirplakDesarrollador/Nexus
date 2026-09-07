@@ -42,6 +42,7 @@ interface FormData {
     descripcion: string
     proposito_homologacion: string
     aplicacion: string
+    producto_homologo: string
 }
 
 export default function NuevaMuestraPage() {
@@ -57,7 +58,8 @@ export default function NuevaMuestraPage() {
         cantidad: 1,
         descripcion: '',
         proposito_homologacion: '',
-        aplicacion: ''
+        aplicacion: '',
+        producto_homologo: ''
     })
     const [fichaTecnica, setFichaTecnica] = useState<File | null>(null)
     const [evidencia, setEvidencia] = useState<File | null>(null)
@@ -162,6 +164,7 @@ export default function NuevaMuestraPage() {
                     descripcion: form.descripcion || null,
                     proposito_homologacion: form.proposito_homologacion || null,
                     aplicacion: form.aplicacion || null,
+                    producto_homologo: form.producto_homologo || null,
                     ficha_tecnica_url: fichaTecnicaUrl,
                     evidencia_url: evidenciaUrl,
                     estado: 'Pendiente'
@@ -211,7 +214,7 @@ export default function NuevaMuestraPage() {
                         </button>
                         <button className="btn-secondary" onClick={() => {
                             setSuccess(null)
-                            setForm({ nombre_producto: '', referencia: '', proveedor: '', marca: '', categoria: '', unidad_medida: 'Unidades', cantidad: 1, descripcion: '', proposito_homologacion: '', aplicacion: '' })
+                            setForm({ nombre_producto: '', referencia: '', proveedor: '', marca: '', categoria: '', unidad_medida: 'Unidades', cantidad: 1, descripcion: '', proposito_homologacion: '', aplicacion: '', producto_homologo: '' })
                             setFichaTecnica(null)
                             setEvidencia(null)
                             setStep(1)
@@ -367,6 +370,17 @@ export default function NuevaMuestraPage() {
                                     <option value="">Selecciona el propósito</option>
                                     {PROPOSITOS.map(p => <option key={p} value={p}>{p}</option>)}
                                 </select>
+                            </div>
+
+                            <div className="form-group">
+                                <label>Este Homologa a</label>
+                                <input
+                                    type="text"
+                                    className="form-control"
+                                    placeholder="Ej: Producto o referencia actual que reemplazaría"
+                                    value={form.producto_homologo}
+                                    onChange={e => updateForm('producto_homologo', e.target.value)}
+                                />
                             </div>
 
                             <div className="form-group full">
@@ -536,6 +550,7 @@ export default function NuevaMuestraPage() {
                                         <tr><td>Categoría</td><td>{form.categoria}</td></tr>
                                         <tr><td>Cantidad</td><td>{form.cantidad || 1} {form.unidad_medida}</td></tr>
                                         {form.proposito_homologacion && <tr><td>Propósito</td><td>{form.proposito_homologacion}</td></tr>}
+                                        {form.producto_homologo && <tr><td>Homologa a</td><td>{form.producto_homologo}</td></tr>}
                                         {form.descripcion && <tr><td>Descripción</td><td>{form.descripcion}</td></tr>}
                                         {form.aplicacion && <tr><td>Aplicación</td><td>{form.aplicacion}</td></tr>}
                                     </tbody>
