@@ -182,6 +182,7 @@ export default function HistorialMuestrasPage() {
                                         {m.marca && <div className="detail-item"><span>Marca</span><strong>{m.marca}</strong></div>}
                                         {m.referencia && <div className="detail-item"><span>Referencia</span><strong>{m.referencia}</strong></div>}
                                         {m.proposito_homologacion && <div className="detail-item"><span>Propósito</span><strong>{m.proposito_homologacion}</strong></div>}
+                                        {m.producto_homologo && <div className="detail-item"><span>Homologa a</span><strong>{m.producto_homologo}</strong></div>}
                                         <div className="detail-item"><span>Solicitante</span><strong>{m.solicitante?.nombre ?? m.solicitante?.email ?? m.solicitante_nombre ?? '—'}</strong></div>
                                         {m.aplicacion && <div className="detail-item" style={{ gridColumn: '1/-1' }}><span>Aplicación</span><strong>{m.aplicacion}</strong></div>}
                                         {m.descripcion && <div className="detail-item" style={{ gridColumn: '1/-1' }}><span>Descripción</span><strong>{m.descripcion}</strong></div>}
