@@ -77,7 +77,7 @@ export default function ComprasMenuPage() {
 
                     {profile?.rol === 'ADMIN' && (
                         <Link href="/admin" className="nav-card card" style={{ borderColor: 'hsl(var(--primary))' }}>
-                            <div className="icon-wrapper" style={{ background: 'hsla(var(--primary), 0.2)', color: 'hsl(var(--primary))' }}>
+                            <div className="icon-wrapper" style={{ background: 'hsl(var(--primary) / 0.2)', color: 'hsl(var(--primary))' }}>
                                 <User size={32} />
                             </div>
                             <h2>Panel Admin</h2>

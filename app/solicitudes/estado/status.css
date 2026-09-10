@@ -31,7 +31,7 @@
 
 .ticket-id {
     font-size: 0.75rem;
-    color: hsla(var(--primary), 0.8);
+    color: hsl(var(--primary) / 0.8);
     font-weight: 700;
     margin-bottom: 0.25rem;
 }
