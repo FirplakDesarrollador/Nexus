@@ -4,9 +4,7 @@ const TENANT_ID = process.env.MICROSOFT_GRAPH_TENANT_ID!
 const CLIENT_ID = process.env.MICROSOFT_GRAPH_CLIENT_ID!
 const CLIENT_SECRET = process.env.MICROSOFT_GRAPH_CLIENT_SECRET!
 
-const GROUP_ID = "9f32dd7b-fd8c-4132-8cef-a3dcbebfc7eb"
 const PLAN_ID = "2kGcLc7a1UOBsaA1cO6JBWQAFEOB"
-const BUCKET_ID = "NKnHuaOWV0iYZsTTNKlYwmQAHG2f"
 
 async function getAccessToken() {
     const params = new URLSearchParams()
@@ -37,8 +35,8 @@ export async function GET(request: Request) {
 
         const token = await getAccessToken()
 
-        // Get tasks for the specific bucket
-        const res = await fetch(`https://graph.microsoft.com/v1.0/planner/buckets/${BUCKET_ID}/tasks`, {
+        // Get all tasks in the plan (a task may have moved to a different bucket, e.g. "Completado")
+        const res = await fetch(`https://graph.microsoft.com/v1.0/planner/plans/${PLAN_ID}/tasks`, {
             headers: {
                 'Authorization': `Bearer ${token}`
             },
@@ -57,9 +55,8 @@ export async function GET(request: Request) {
         const task = tasks.find((t: any) => t.title.toLowerCase().includes(cleanTicket))
 
         if (!task) {
-            console.log(`Planner search failed. Ticket: "${cleanTicket}". Tasks in bucket:`, tasks.map((t:any) => t.title))
+            console.log(`Planner search failed. Ticket: "${cleanTicket}". Tasks in plan:`, tasks.map((t:any) => t.title))
             return NextResponse.json({ found: false, debug: tasks.map((t:any) => t.title) })
-            return NextResponse.json({ found: false })
         }
 
         return NextResponse.json({ 
