@@ -76,6 +76,17 @@ export default function AdminDashboard() {
                 const data = await res.json()
                 if (data.found && data.task) {
                     setPlannerTask(data.task)
+
+                    // Planner -> App: si ya se cerró/completó la tarea en Planner pero
+                    // la solicitud sigue "abierta" en Nexus, refleja el estado aquí.
+                    const yaFinalizada = ['Completada', 'Rechazada'].includes(selectedRequest.estado_actual)
+                    if (data.task.percentComplete === 100 && !yaFinalizada) {
+                        await handleUpdateStatus(
+                            selectedRequest.id,
+                            'Completada',
+                            'Sincronizado automáticamente: la tarea fue marcada como completada en Microsoft Planner.'
+                        )
+                    }
                 } else {
                     setPlannerTask(null)
                 }
@@ -675,7 +686,7 @@ export default function AdminDashboard() {
                                                     fetchDocuments(req.id);
                                                     setNewComment('');
                                                 }}
-                                                style={{ background: 'hsla(var(--primary), 0.1)', color: 'hsl(var(--primary))' }}
+                                                style={{ background: 'hsl(var(--primary) / 0.1)', color: 'hsl(var(--primary))' }}
                                             >
                                                 Gestionar
                                             </button>
@@ -826,12 +837,11 @@ export default function AdminDashboard() {
                         </div>
                         {/* ----------------------- */}
 
-                        <div className="management-actions glass" style={{ 
-                            marginTop: '3rem', 
-                            padding: '2rem', 
-                            border: '1px solid hsla(var(--primary), 0.2)', 
-                            borderRadius: '1.5rem', 
-                            background: 'rgba(255,255,255,0.015)',
+                        <div className="management-actions glass" style={{
+                            marginTop: '3rem',
+                            padding: '2rem',
+                            border: '1px solid hsl(var(--primary) / 0.2)',
+                            borderRadius: '1.5rem',
                             boxShadow: 'inset 0 0 20px rgba(0,0,0,0.2)',
                             boxSizing: 'border-box'
                         }}>
@@ -861,7 +871,7 @@ export default function AdminDashboard() {
                                         <p style={{ textAlign: 'center', opacity: 0.5, fontSize: '0.85rem' }}>No hay comentarios registrados.</p>
                                     ) : (
                                         comments.map(c => (
-                                            <div key={c.id} style={{ borderLeft: '3px solid hsla(var(--primary), 0.5)', paddingLeft: '1rem' }}>
+                                            <div key={c.id} style={{ borderLeft: '3px solid hsl(var(--primary) / 0.5)', paddingLeft: '1rem' }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '0.25rem' }}>
                                                     <span style={{ fontWeight: 600, color: 'hsl(var(--primary))' }}>{c.actor?.nombre || 'Sistema'}</span>
                                                     <span style={{ opacity: 0.5 }}>{new Date(c.created_at).toLocaleString()}</span>
