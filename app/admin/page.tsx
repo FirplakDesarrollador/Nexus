@@ -388,10 +388,9 @@ export default function AdminDashboard() {
                     zIndex: 9999,
                     padding: '2rem'
                 }}>
-                    <div className="modal-content glass animate-slide-up" style={{ 
-                        border: '1px solid rgba(255,255,255,0.1)',
+                    <div className="modal-content glass animate-slide-up" style={{
                         borderRadius: '16px',
-                        maxWidth: '400px', 
+                        maxWidth: '400px',
                         padding: '2rem', 
                         textAlign: 'center',
                         display: 'flex',
@@ -417,7 +416,7 @@ export default function AdminDashboard() {
                         <div style={{ display: 'flex', gap: '1rem', width: '100%', marginTop: '1.5rem' }}>
                             <button 
                                 className="action-btn" 
-                                style={{ flex: 1, background: 'rgba(255,255,255,0.05)', color: 'white' }}
+                                style={{ flex: 1, background: 'hsl(var(--muted))', color: 'hsl(var(--foreground))' }}
                                 onClick={() => setFileToDelete(null)}
                                 disabled={isDeleting}
                             >
@@ -445,7 +444,7 @@ export default function AdminDashboard() {
                 const hasValues = cierreForm.valor_total_compra !== ''
                 return (
                     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.85)', zIndex: 9999, padding: '2rem' }}>
-                        <div className="modal-content glass animate-scale-in" style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', maxWidth: '480px', width: '100%', padding: '2rem', color: 'hsl(var(--foreground))', position: 'relative' }}>
+                        <div className="modal-content glass animate-scale-in" style={{ borderRadius: '16px', maxWidth: '480px', width: '100%', padding: '2rem', color: 'hsl(var(--foreground))', position: 'relative' }}>
                             <button onClick={() => setShowCierreModal(false)} style={{ position: 'absolute', right: '1rem', top: '1rem', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.5 }}><X size={20} /></button>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
                                 <div style={{ background: 'rgba(16,185,129,0.1)', color: '#10b981', padding: '0.6rem', borderRadius: '50%', display: 'inline-flex' }}><CheckCircle2 size={24} /></div>
@@ -711,13 +710,12 @@ export default function AdminDashboard() {
                     overflowY: 'auto',
                     display: 'flex'
                 }}>
-                    <div className="modal-content glass animate-scale-in" style={{ 
+                    <div className="modal-content glass animate-scale-in" style={{
                         width: '100%',
-                        maxWidth: '1000px', 
+                        maxWidth: '1000px',
                         margin: 'auto',
-                        position: 'relative', 
+                        position: 'relative',
                         padding: '2.5rem',
-                        border: '1px solid rgba(255,255,255,0.1)',
                         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
                         boxSizing: 'border-box',
                         borderRadius: '16px'
@@ -725,7 +723,7 @@ export default function AdminDashboard() {
                         <button
                             className="close-btn"
                             onClick={() => setSelectedRequest(null)}
-                            style={{ position: 'absolute', right: '1.5rem', top: '1.5rem', background: 'none', border: 'none', color: 'white', cursor: 'pointer', opacity: 0.5 }}
+                            style={{ position: 'absolute', right: '1.5rem', top: '1.5rem', background: 'none', border: 'none', color: 'hsl(var(--foreground))', cursor: 'pointer', opacity: 0.5 }}
                         >
                             <X size={24} />
                         </button>
@@ -787,7 +785,7 @@ export default function AdminDashboard() {
                                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.6, fontSize: '0.8rem', marginBottom: '0.5rem' }}>
                                     <FileText size={14} /> Propósito / Contexto
                                 </label>
-                                <div style={{ fontSize: '0.95rem', background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '0.5rem' }}>
+                                <div style={{ fontSize: '0.95rem', background: 'hsl(var(--muted))', padding: '1rem', borderRadius: '0.5rem' }}>
                                     {selectedRequest.proposito || 'Sin descripción adicional.'}
                                 </div>
                             </div>
@@ -895,13 +893,13 @@ export default function AdminDashboard() {
                                     
                                     <div className="files-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
                                         {attachedFiles.length === 0 ? (
-                                            <p style={{ gridColumn: '1/-1', textAlign: 'center', opacity: 0.5, fontSize: '0.8rem', padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '0.5rem', border: '1px dashed rgba(255,255,255,0.1)' }}>
+                                            <p style={{ gridColumn: '1/-1', textAlign: 'center', opacity: 0.5, fontSize: '0.8rem', padding: '1rem', background: 'hsl(var(--muted))', borderRadius: '0.5rem', border: '1px dashed hsl(var(--border))' }}>
                                                 No hay archivos adjuntos.
                                             </p>
                                         ) : (
                                             attachedFiles.map(file => (
-                                                <div key={file.id} className="file-card glass" style={{ padding: '0.75rem', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                                    <div style={{ background: 'rgba(255,255,255,0.05)', padding: '0.5rem', borderRadius: '0.4rem' }}>
+                                                <div key={file.id} className="file-card glass" style={{ padding: '0.75rem', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', border: '1px solid hsl(var(--border))' }}>
+                                                    <div style={{ background: 'hsl(var(--muted))', padding: '0.5rem', borderRadius: '0.4rem' }}>
                                                         {file.filename.match(/\.(jpg|jpeg|png|gif)$/i) ? <ImageIcon size={18} /> : <FileText size={18} />}
                                                     </div>
                                                     <div style={{ flex: 1, minWidth: 0 }}>
