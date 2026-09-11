@@ -388,7 +388,9 @@ export default function AdminDashboard() {
                     zIndex: 9999,
                     padding: '2rem'
                 }}>
-                    <div className="modal-content glass animate-slide-up" style={{
+                    <div className="modal-content animate-slide-up" style={{
+                        background: 'hsl(var(--card))',
+                        border: '1px solid hsl(var(--border))',
                         borderRadius: '16px',
                         maxWidth: '400px',
                         padding: '2rem', 
@@ -444,7 +446,7 @@ export default function AdminDashboard() {
                 const hasValues = cierreForm.valor_total_compra !== ''
                 return (
                     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.85)', zIndex: 9999, padding: '2rem' }}>
-                        <div className="modal-content glass animate-scale-in" style={{ borderRadius: '16px', maxWidth: '480px', width: '100%', padding: '2rem', color: 'hsl(var(--foreground))', position: 'relative' }}>
+                        <div className="modal-content animate-scale-in" style={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '16px', maxWidth: '480px', width: '100%', padding: '2rem', color: 'hsl(var(--foreground))', position: 'relative' }}>
                             <button onClick={() => setShowCierreModal(false)} style={{ position: 'absolute', right: '1rem', top: '1rem', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.5 }}><X size={20} /></button>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
                                 <div style={{ background: 'rgba(16,185,129,0.1)', color: '#10b981', padding: '0.6rem', borderRadius: '50%', display: 'inline-flex' }}><CheckCircle2 size={24} /></div>
@@ -710,12 +712,14 @@ export default function AdminDashboard() {
                     overflowY: 'auto',
                     display: 'flex'
                 }}>
-                    <div className="modal-content glass animate-scale-in" style={{
+                    <div className="modal-content animate-scale-in" style={{
                         width: '100%',
                         maxWidth: '1000px',
                         margin: 'auto',
                         position: 'relative',
                         padding: '2.5rem',
+                        background: 'hsl(var(--card))',
+                        border: '1px solid hsl(var(--border))',
                         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
                         boxSizing: 'border-box',
                         borderRadius: '16px'
@@ -835,12 +839,12 @@ export default function AdminDashboard() {
                         </div>
                         {/* ----------------------- */}
 
-                        <div className="management-actions glass" style={{
+                        <div className="management-actions" style={{
                             marginTop: '3rem',
                             padding: '2rem',
+                            background: 'hsl(var(--muted))',
                             border: '1px solid hsl(var(--primary) / 0.2)',
                             borderRadius: '1.5rem',
-                            boxShadow: 'inset 0 0 20px rgba(0,0,0,0.2)',
                             boxSizing: 'border-box'
                         }}>
                             <h3 style={{ marginTop: 0, marginBottom: '1.5rem', fontSize: '1rem' }}>Acciones de Gestión</h3>
