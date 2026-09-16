@@ -100,7 +100,7 @@
     position: absolute;
     top: calc(100% + 4px);
     left: 0;
-    min-width: 190px;
+    min-width: 210px;
     background: hsl(var(--card));
     border: 1px solid #6366f1;
     border-radius: 0.5rem;
@@ -124,8 +124,8 @@
 .col-filter-search:focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15); }
 .col-filter-actions {
     display: flex;
-    justify-content: space-between;
-    gap: 0.5rem;
+    flex-wrap: wrap;
+    gap: 0.15rem 0.55rem;
     padding: 0 0.15rem 0.35rem;
     border-bottom: 1px solid hsl(var(--border));
     margin-bottom: 0.3rem;
