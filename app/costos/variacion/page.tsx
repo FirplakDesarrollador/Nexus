@@ -87,12 +87,6 @@ function archivoCellDisplay(r: VariacionRow, key: string): string {
     }
 }
 
-// Texto en minúsculas de una columna del archivo, usado para el filtro por columna
-// (compara contra lo mismo que se ve renderizado, no el valor crudo).
-function archivoCellText(r: VariacionRow, key: string): string {
-    return archivoCellDisplay(r, key).toLowerCase()
-}
-
 function esTablero(descripcion: string | null): boolean {
     return !!descripcion && descripcion.toUpperCase().includes('TABLERO')
 }
@@ -185,12 +179,13 @@ function ItemSearchSelect({ options, value, onChange, placeholder }: {
     )
 }
 
-// Filtro por columna de la tabla "Visualizar Archivo": lista de valores existentes
-// en esa columna, con buscador — en vez de texto libre.
+// Filtro por columna de la tabla "Visualizar Archivo", al estilo "segmentación de datos"
+// de Excel: lista de valores existentes en esa columna, con checkboxes para elegir
+// varios a la vez (no solo uno), y buscador para listas largas.
 function ColumnFilterSelect({ options, value, onChange }: {
     options: string[]
-    value: string
-    onChange: (val: string) => void
+    value: string[]
+    onChange: (val: string[]) => void
 }) {
     const [isOpen, setIsOpen] = useState(false)
     const [searchTerm, setSearchTerm] = useState('')
@@ -206,12 +201,18 @@ function ColumnFilterSelect({ options, value, onChange }: {
         return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [])
 
+    const toggle = (opt: string) => {
+        onChange(value.includes(opt) ? value.filter(v => v !== opt) : [...value, opt])
+    }
+
+    const label = value.length === 0 ? 'Filtrar...' : value.length === 1 ? value[0] : `${value.length} seleccionados`
+
     return (
         <div className="col-filter" ref={containerRef}>
-            <div className={`col-filter-trigger ${isOpen ? 'active' : ''} ${value ? 'has-value' : ''}`} onClick={() => setIsOpen(!isOpen)}>
-                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value || 'Filtrar...'}</span>
-                {value ? (
-                    <X size={12} className="col-filter-clear" onClick={e => { e.stopPropagation(); onChange(''); setSearchTerm('') }} />
+            <div className={`col-filter-trigger ${isOpen ? 'active' : ''} ${value.length ? 'has-value' : ''}`} onClick={() => setIsOpen(!isOpen)}>
+                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+                {value.length > 0 ? (
+                    <X size={12} className="col-filter-clear" onClick={e => { e.stopPropagation(); onChange([]); setSearchTerm('') }} />
                 ) : (
                     <Search size={12} className="col-filter-icon" />
                 )}
@@ -227,12 +228,19 @@ function ColumnFilterSelect({ options, value, onChange }: {
                         onChange={e => setSearchTerm(e.target.value)}
                         onClick={e => e.stopPropagation()}
                     />
+                    {filtered.length > 0 && (
+                        <div className="col-filter-actions">
+                            <button type="button" onClick={() => onChange(Array.from(new Set([...value, ...filtered])))}>Seleccionar todo</button>
+                            <button type="button" onClick={() => onChange([])}>Limpiar</button>
+                        </div>
+                    )}
                     <div className="col-filter-options">
                         {filtered.length > 0 ? (
                             filtered.slice(0, 300).map(o => (
-                                <div key={o} className={`col-filter-option ${o === value ? 'selected' : ''}`} onClick={() => { onChange(o); setIsOpen(false); setSearchTerm('') }}>
-                                    {o}
-                                </div>
+                                <label key={o} className={`col-filter-option ${value.includes(o) ? 'selected' : ''}`}>
+                                    <input type="checkbox" checked={value.includes(o)} onChange={() => toggle(o)} />
+                                    <span>{o}</span>
+                                </label>
                             ))
                         ) : (
                             <div className="col-filter-empty">Sin resultados</div>
@@ -283,7 +291,7 @@ function VariacionCostosContent() {
     const [msMsg, setMsMsg] = useState<string | null>(null)
     const [checkingCorreos, setCheckingCorreos] = useState(false)
     const [archivoPage, setArchivoPage] = useState(1)
-    const [archivoFilters, setArchivoFilters] = useState<Record<string, string>>({})
+    const [archivoFilters, setArchivoFilters] = useState<Record<string, string[]>>({})
     const [archivoSortTotalLinea, setArchivoSortTotalLinea] = useState<'asc' | 'desc' | null>(null)
 
     const [vista, setVista] = useState<'activos' | 'todo'>('activos')
@@ -463,9 +471,9 @@ function VariacionCostosContent() {
     }, [rows])
 
     const archivoFilteredRows = useMemo(() => {
-        const activos = Object.entries(archivoFilters).filter(([, v]) => v.trim() !== '')
+        const activos = Object.entries(archivoFilters).filter(([, vals]) => vals.length > 0)
         if (activos.length === 0) return rows
-        return rows.filter(r => activos.every(([key, val]) => archivoCellText(r, key).includes(val.toLowerCase())))
+        return rows.filter(r => activos.every(([key, vals]) => vals.includes(archivoCellDisplay(r, key))))
     }, [rows, archivoFilters])
 
     const archivoSortedRows = useMemo(() => {
@@ -814,7 +822,7 @@ function VariacionCostosContent() {
                             <h2 style={{ margin: 0, fontSize: '1rem' }}>
                                 Archivo Completo ({archivoFilteredRows.length.toLocaleString('es-CO')} de {rows.length.toLocaleString('es-CO')} filas)
                             </h2>
-                            {Object.values(archivoFilters).some(v => v.trim() !== '') && (
+                            {Object.values(archivoFilters).some(vals => vals.length > 0) && (
                                 <button className="action-btn" style={{ fontSize: '0.78rem' }} onClick={() => setArchivoFilters({})}>Limpiar filtros</button>
                             )}
                         </div>
@@ -849,7 +857,7 @@ function VariacionCostosContent() {
                                             <th key={key} style={{ padding: '0.3rem' }}>
                                                 <ColumnFilterSelect
                                                     options={archivoColumnOptions[key] || []}
-                                                    value={archivoFilters[key] || ''}
+                                                    value={archivoFilters[key] || []}
                                                     onChange={v => setArchivoFilters(prev => ({ ...prev, [key]: v }))}
                                                 />
                                             </th>
@@ -857,14 +865,14 @@ function VariacionCostosContent() {
                                         <th style={{ padding: '0.3rem' }}>
                                             <ColumnFilterSelect
                                                 options={ESTADOS_EDITABLES}
-                                                value={archivoFilters.estado || ''}
+                                                value={archivoFilters.estado || []}
                                                 onChange={v => setArchivoFilters(prev => ({ ...prev, estado: v }))}
                                             />
                                         </th>
                                         <th style={{ padding: '0.3rem' }}>
                                             <ColumnFilterSelect
                                                 options={['Correo', 'Excel']}
-                                                value={archivoFilters.origen || ''}
+                                                value={archivoFilters.origen || []}
                                                 onChange={v => setArchivoFilters(prev => ({ ...prev, origen: v }))}
                                             />
                                         </th>
