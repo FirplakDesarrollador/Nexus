@@ -87,6 +87,27 @@ function archivoCellDisplay(r: VariacionRow, key: string): string {
     }
 }
 
+// Valor crudo detrás de una columna del archivo (no el texto formateado) — se usa
+// para ordenar numérico/cronológicamente y para los atajos "Positivos"/"Negativos"
+// del filtro. Devuelve null en columnas de texto (ahí no aplica ni orden ni signo).
+function archivoCellRaw(r: VariacionRow, key: string): number | string | null {
+    switch (key) {
+        case 'fecha_correo': return r.fecha_correo
+        case 'fecha_contabilizacion': return r.fecha_contabilizacion
+        case 'precio': return r.precio
+        case 'precio_prom_almacen': return r.precio_prom_almacen
+        case 'diferencia_precios': return r.diferencia_precios
+        case 'porc_variacion': return r.porc_variacion
+        case 'penultimo_precio_prov': return r.penultimo_precio_prov
+        case 'dif_vs_penultimo_precio': return r.dif_vs_penultimo_precio
+        case 'porc_vs_penultimo': return r.porc_vs_penultimo
+        case 'cantidad': return r.cantidad
+        case 'total_linea': return r.total_linea
+        case 'precio_lista_precios': return r.precio_lista_precios
+        default: return null
+    }
+}
+
 function esTablero(descripcion: string | null): boolean {
     return !!descripcion && descripcion.toUpperCase().includes('TABLERO')
 }
@@ -179,11 +200,16 @@ function ItemSearchSelect({ options, value, onChange, placeholder }: {
     )
 }
 
+// Una opción del filtro: lo que se ve en la celda, y (si la columna es numérica)
+// el valor crudo — se usa para ordenar bien los números/fechas y para los atajos
+// "Positivos"/"Negativos" (en vez de tener que marcar valor por valor).
+interface ColFilterOption { display: string; raw: number | string | null }
+
 // Filtro por columna de la tabla "Visualizar Archivo", al estilo "segmentación de datos"
 // de Excel: lista de valores existentes en esa columna, con checkboxes para elegir
-// varios a la vez (no solo uno), y buscador para listas largas.
+// varios a la vez, buscador para listas largas, y atajos por signo para columnas numéricas.
 function ColumnFilterSelect({ options, value, onChange }: {
-    options: string[]
+    options: ColFilterOption[]
     value: string[]
     onChange: (val: string[]) => void
 }) {
@@ -191,7 +217,10 @@ function ColumnFilterSelect({ options, value, onChange }: {
     const [searchTerm, setSearchTerm] = useState('')
     const containerRef = useRef<HTMLDivElement>(null)
 
-    const filtered = options.filter(o => o.toLowerCase().includes(searchTerm.toLowerCase()))
+    const filtered = options.filter(o => o.display.toLowerCase().includes(searchTerm.toLowerCase()))
+    const numericOptions = options.filter((o): o is { display: string; raw: number } => typeof o.raw === 'number')
+    const hasPositivos = numericOptions.some(o => o.raw > 0)
+    const hasNegativos = numericOptions.some(o => o.raw < 0)
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -203,6 +232,10 @@ function ColumnFilterSelect({ options, value, onChange }: {
 
     const toggle = (opt: string) => {
         onChange(value.includes(opt) ? value.filter(v => v !== opt) : [...value, opt])
+    }
+
+    const selectOnlySign = (sign: 'pos' | 'neg') => {
+        onChange(numericOptions.filter(o => sign === 'pos' ? o.raw > 0 : o.raw < 0).map(o => o.display))
     }
 
     const label = value.length === 0 ? 'Filtrar...' : value.length === 1 ? value[0] : `${value.length} seleccionados`
@@ -228,18 +261,22 @@ function ColumnFilterSelect({ options, value, onChange }: {
                         onChange={e => setSearchTerm(e.target.value)}
                         onClick={e => e.stopPropagation()}
                     />
-                    {filtered.length > 0 && (
+                    {(filtered.length > 0 || hasPositivos || hasNegativos) && (
                         <div className="col-filter-actions">
-                            <button type="button" onClick={() => onChange(Array.from(new Set([...value, ...filtered])))}>Seleccionar todo</button>
+                            {filtered.length > 0 && (
+                                <button type="button" onClick={() => onChange(Array.from(new Set([...value, ...filtered.map(o => o.display)])))}>Todo</button>
+                            )}
+                            {hasNegativos && <button type="button" onClick={() => selectOnlySign('pos')}>Solo positivos</button>}
+                            {hasPositivos && <button type="button" onClick={() => selectOnlySign('neg')}>Solo negativos</button>}
                             <button type="button" onClick={() => onChange([])}>Limpiar</button>
                         </div>
                     )}
                     <div className="col-filter-options">
                         {filtered.length > 0 ? (
                             filtered.slice(0, 300).map(o => (
-                                <label key={o} className={`col-filter-option ${value.includes(o) ? 'selected' : ''}`}>
-                                    <input type="checkbox" checked={value.includes(o)} onChange={() => toggle(o)} />
-                                    <span>{o}</span>
+                                <label key={o.display} className={`col-filter-option ${value.includes(o.display) ? 'selected' : ''}`}>
+                                    <input type="checkbox" checked={value.includes(o.display)} onChange={() => toggle(o.display)} />
+                                    <span>{o.display}</span>
                                 </label>
                             ))
                         ) : (
@@ -458,14 +495,22 @@ function VariacionCostosContent() {
     ] as const
 
     const archivoColumnOptions = useMemo(() => {
-        const map: Record<string, string[]> = {}
+        const map: Record<string, ColFilterOption[]> = {}
         ARCHIVO_FILTER_COLUMNS.forEach(key => {
-            const set = new Set<string>()
+            const byDisplay = new Map<string, ColFilterOption>()
             rows.forEach(r => {
-                const raw = archivoCellDisplay(r, key)
-                if (raw) set.add(raw)
+                const display = archivoCellDisplay(r, key)
+                if (display && !byDisplay.has(display)) {
+                    byDisplay.set(display, { display, raw: archivoCellRaw(r, key) })
+                }
             })
-            map[key] = Array.from(set).sort()
+            // Orden numérico/cronológico real (no alfabético del texto formateado) —
+            // así "-100.0%" no queda entre "-10.0%" y "-11.0%".
+            map[key] = Array.from(byDisplay.values()).sort((a, b) => {
+                if (typeof a.raw === 'number' && typeof b.raw === 'number') return a.raw - b.raw
+                if (typeof a.raw === 'string' && typeof b.raw === 'string') return a.raw.localeCompare(b.raw)
+                return a.display.localeCompare(b.display)
+            })
         })
         return map
     }, [rows])
@@ -864,14 +909,14 @@ function VariacionCostosContent() {
                                         ))}
                                         <th style={{ padding: '0.3rem' }}>
                                             <ColumnFilterSelect
-                                                options={ESTADOS_EDITABLES}
+                                                options={ESTADOS_EDITABLES.map(v => ({ display: v, raw: null }))}
                                                 value={archivoFilters.estado || []}
                                                 onChange={v => setArchivoFilters(prev => ({ ...prev, estado: v }))}
                                             />
                                         </th>
                                         <th style={{ padding: '0.3rem' }}>
                                             <ColumnFilterSelect
-                                                options={['Correo', 'Excel']}
+                                                options={['Correo', 'Excel'].map(v => ({ display: v, raw: null }))}
                                                 value={archivoFilters.origen || []}
                                                 onChange={v => setArchivoFilters(prev => ({ ...prev, origen: v }))}
                                             />
