@@ -952,27 +952,24 @@ export default function AdminDashboard() {
                                 </button>
                             </div>
 
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginTop: '1rem' }}>
-                                <button
-                                    className="btn-primary"
-                                    style={{ 
-                                        width: 'auto', 
-                                        background: '#10b981', 
-                                        borderColor: '#10b981',
-                                        fontSize: '0.8rem',
-                                        padding: '0.5rem 1rem'
-                                    }}
-                                    onClick={() => handleCloseRequest()}
-                                    disabled={isSaving || selectedRequest.estado_actual === 'Revisión'}
-                                >
-                                    Finalizar Gestión (Mover a Historial)
-                                </button>
-                                {selectedRequest.estado_actual === 'Revisión' && (
-                                    <p style={{ fontSize: '0.7rem', opacity: 0.5, textAlign: 'right', marginTop: '0.25rem' }}>
-                                        El estado debe ser distinto a "Revisión" para finalizar.
-                                    </p>
-                                )}
-                            </div>
+                            {selectedRequest.estado_actual === 'Completada' && (
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginTop: '1rem' }}>
+                                    <button
+                                        className="btn-primary"
+                                        style={{
+                                            width: 'auto',
+                                            background: '#10b981',
+                                            borderColor: '#10b981',
+                                            fontSize: '0.8rem',
+                                            padding: '0.5rem 1rem'
+                                        }}
+                                        onClick={() => handleCloseRequest()}
+                                        disabled={isSaving}
+                                    >
+                                        Finalizar Gestión (Mover a Historial)
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
