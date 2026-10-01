@@ -708,7 +708,6 @@ function VariacionCostosContent() {
                                         { label: 'Prioridad Alta', value: ultimoRun.prioridad_alta, color: PRIORIDAD_COLOR.Alta },
                                         { label: 'Prioridad Media', value: ultimoRun.prioridad_media, color: PRIORIDAD_COLOR.Media },
                                         { label: 'Prioridad Baja', value: ultimoRun.prioridad_baja, color: PRIORIDAD_COLOR.Baja },
-                                        { label: 'Impacto económico pendiente', value: fmt(ultimoRun.impacto_pendiente_total) },
                                     ].map((k, i) => (
                                         <div key={i} className="stat-card card">
                                             <div style={{ flex: 1 }}>
