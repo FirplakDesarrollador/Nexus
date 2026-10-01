@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { checkNuevosCorreos } from '@/lib/variacionEmailIngest'
+import { syncEntradasMercancia } from '@/lib/biComprasSync'
 
 export const maxDuration = 60
 
 const CRON_SECRET = process.env.CRON_SECRET!
 
-// Llamado por Vercel Cron todos los días a las 9:30 a.m. (media hora después de que
-// llega el correo de variación de costos al buzón de Nallely).
+// Llamado por Vercel Cron todos los días a las 6:00 a.m. Colombia (11:00 UTC), antes
+// de que llegue el correo de variación de costos — así el BI ya está fresco cuando el
+// motor de preanálisis lo necesite.
 export async function GET(req: NextRequest) {
     try {
         const auth = req.headers.get('authorization')
@@ -15,16 +16,16 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
         }
 
-        const result = await checkNuevosCorreos()
+        const result = await syncEntradasMercancia()
         return NextResponse.json({ success: true, ...result })
 
     } catch (err: any) {
-        console.error('[costos/variacion-email-check][GET]', err)
+        console.error('[costos/bi-compras-sync][GET]', err)
         return NextResponse.json({ error: err.message }, { status: 500 })
     }
 }
 
-// Botón "Revisar correos ahora" — requiere sesión de un usuario con rol ADMIN
+// Botón manual de sincronización — requiere sesión de un usuario con rol ADMIN.
 export async function POST(req: NextRequest) {
     try {
         const accessToken = req.headers.get('authorization')?.replace('Bearer ', '')
@@ -49,11 +50,11 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Requiere rol ADMIN' }, { status: 403 })
         }
 
-        const result = await checkNuevosCorreos()
+        const result = await syncEntradasMercancia()
         return NextResponse.json({ success: true, ...result })
 
     } catch (err: any) {
-        console.error('[costos/variacion-email-check][POST]', err)
+        console.error('[costos/bi-compras-sync][POST]', err)
         return NextResponse.json({ error: err.message }, { status: 500 })
     }
 }

@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import * as cheerio from 'cheerio'
 import { getValidAccessToken } from './microsoftDelegatedAuth'
 import { parseCurrency, parseNumber, parsePlainNumber, parseText, ddmmyyyyToDate, computeSourceKey } from './variacionParsers'
+import { ejecutarPreanalisis, ENTRADA_MERCANCIA as ENTRADA_MERCANCIA_TIPO_DOC } from './variacionAnalisisEngine'
 
 const NALLELY_EMAIL = 'nallely.lopera@firplak.com'
 // Coincide con lo que llega reenviado por la regla de Outlook — se usa "contiene" en vez
@@ -103,7 +104,10 @@ export async function checkNuevosCorreos(): Promise<{ correosNuevos: number; fil
             const record: Record<string, unknown> = {
                 ...fila,
                 fecha_correo: fechaCorreo,
-                estado: 'Sin iniciar',
+                // El motor de preanálisis clasifica las "Entrada de Mercacía" justo
+                // después de este upsert; Orden de Compra/Precios de Entrega no llevan
+                // estado de este flujo (el motor nunca las toca).
+                estado: fila.tipo_documento === ENTRADA_MERCANCIA_TIPO_DOC ? 'Pendiente' : null,
                 obs_nl: null,
                 responsable: null,
                 avoidance_ahorro: null,
@@ -131,6 +135,13 @@ export async function checkNuevosCorreos(): Promise<{ correosNuevos: number; fil
         if (procesadoError) throw new Error(`Error registrando el correo ${message.id} como procesado: ${procesadoError.message}`)
 
         totalFilas += registros.length
+    }
+
+    // Preanálisis automático — no se dispara manualmente desde la UI (el botón
+    // "ANALIZAR" solo abre el resumen de la última corrida). Solo corre si llegó algo
+    // nuevo; si no, no tiene sentido reclasificar un dataset sin cambios.
+    if (totalFilas > 0) {
+        await ejecutarPreanalisis()
     }
 
     return { correosNuevos: nuevos.length, filasInsertadas: totalFilas }

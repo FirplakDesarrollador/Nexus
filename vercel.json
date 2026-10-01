@@ -1,6 +1,10 @@
 {
     "crons": [
         {
+            "path": "/api/costos/bi-compras-sync",
+            "schedule": "0 11 * * *"
+        },
+        {
             "path": "/api/costos/variacion-email-check",
             "schedule": "30 14 * * *"
         }
