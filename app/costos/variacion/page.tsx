@@ -46,6 +46,29 @@ interface VariacionRow {
     synced_at: string | null
     revisiones_en_proceso: number | null
     origen: string | null
+    prioridad: 'Alta' | 'Media' | 'Baja' | null
+    motivo_alerta: string | null
+    ultimo_costo_historico: number | null
+    fecha_ultimo_costo_historico: string | null
+    origen_cierre: string | null
+    impacto_acumulado_grupo: number | null
+}
+
+interface AnalisisRun {
+    id: string
+    iniciado_en: string
+    finalizado_en: string | null
+    total_recibidos: number
+    total_auto_finalizado: number
+    total_no_aplica: number
+    total_pendiente: number
+    total_en_analisis: number
+    total_nuevos_pendientes: number
+    prioridad_alta: number
+    prioridad_media: number
+    prioridad_baja: number
+    impacto_pendiente_total: number
+    estado_run: string
 }
 
 interface MsStatus {
@@ -59,7 +82,8 @@ const PAGE_SIZE = 50
 const ORIGEN_COLOR: Record<string, string> = { Nacional: '#10b981', Exterior: '#6366f1' }
 const ESTANCADO_UMBRAL = 3
 const SIN_ESTADO = 'Sin estado'
-const ESTADOS_EDITABLES = ['Sin iniciar', 'En proceso', 'Finalizado', 'No aplica']
+const ESTADOS_EDITABLES = ['Pendiente', 'En análisis', 'Finalizado', 'No aplica']
+const PRIORIDAD_COLOR: Record<string, string> = { Alta: '#ef4444', Media: '#f59e0b', Baja: '#10b981' }
 const NALLELY_EMAIL = 'nallely.lopera@firplak.com'
 
 const fmt = (n: number | null | undefined) => n === null || n === undefined ? '—' : `$${Math.round(n).toLocaleString('es-CO')}`
@@ -323,7 +347,10 @@ function VariacionCostosContent() {
     const [expandedId, setExpandedId] = useState<string | null>(null)
     const [page, setPage] = useState(1)
 
-    const [tab, setTab] = useState<'historico' | 'archivo'>('historico')
+    const [tab, setTab] = useState<'historico' | 'archivo' | 'analisis'>('historico')
+    const [ultimoRun, setUltimoRun] = useState<AnalisisRun | null>(null)
+    const [mostrarPendientes, setMostrarPendientes] = useState(false)
+    const [expandedPendienteId, setExpandedPendienteId] = useState<string | null>(null)
     const [msStatus, setMsStatus] = useState<MsStatus | null>(null)
     const [msMsg, setMsMsg] = useState<string | null>(null)
     const [checkingCorreos, setCheckingCorreos] = useState(false)
@@ -359,6 +386,12 @@ function VariacionCostosContent() {
         setLoading(false)
     }
 
+    const fetchUltimoRun = async () => {
+        const { data } = await supabase.schema('nexus').from('variacion_analisis_runs')
+            .select('*').order('iniciado_en', { ascending: false }).limit(1).maybeSingle()
+        if (data) setUltimoRun(data as AnalisisRun)
+    }
+
     const fetchMsStatus = async () => {
         const { data: { session } } = await supabase.auth.getSession()
         const res = await fetch('/api/auth/microsoft/status', {
@@ -369,7 +402,7 @@ function VariacionCostosContent() {
     }
 
     useEffect(() => {
-        if (isAdmin === true) { fetchRows(); fetchMsStatus() }
+        if (isAdmin === true) { fetchRows(); fetchMsStatus(); fetchUltimoRun() }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isAdmin])
 
@@ -451,10 +484,24 @@ function VariacionCostosContent() {
         })
     }, [filteredBase, vista, fEstado])
 
+    // Bandeja de análisis humano: todos los Pendiente, sin los filtros del histórico —
+    // es una cola aparte, ordenada por prioridad y luego por impacto acumulado.
+    const PRIORIDAD_ORDEN: Record<string, number> = { Alta: 0, Media: 1, Baja: 2 }
+    const pendientesOrdenados = useMemo(() => {
+        return rows
+            .filter(r => r.estado === 'Pendiente')
+            .sort((a, b) => {
+                const pa = PRIORIDAD_ORDEN[a.prioridad ?? ''] ?? 3
+                const pb = PRIORIDAD_ORDEN[b.prioridad ?? ''] ?? 3
+                if (pa !== pb) return pa - pb
+                return (b.impacto_acumulado_grupo ?? 0) - (a.impacto_acumulado_grupo ?? 0)
+            })
+    }, [rows])
+
     const totalRegistros = filtered.length
     const incrementos = filtered.filter(r => (r.porc_variacion ?? 0) > 0).length
     const decrementos = filtered.filter(r => (r.porc_variacion ?? 0) < 0).length
-    const enSeguimientoEstancado = filtered.filter(r => r.estado === 'En proceso' && (r.revisiones_en_proceso || 0) >= ESTANCADO_UMBRAL).length
+    const enSeguimientoEstancado = filtered.filter(r => r.estado === 'En análisis' && (r.revisiones_en_proceso || 0) >= ESTANCADO_UMBRAL).length
     const ultimaSync = rows.reduce<string | null>((max, r) => (r.synced_at && (!max || r.synced_at > max)) ? r.synced_at : max, null)
 
     const defaultItem = useMemo(() => {
@@ -570,6 +617,13 @@ function VariacionCostosContent() {
             <div style={{ display: 'inline-flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
                 <button
                     className="action-btn"
+                    onClick={() => setTab('analisis')}
+                    style={tab === 'analisis' ? { background: 'hsl(var(--primary))', color: '#f5f1ea', borderColor: 'hsl(var(--primary))' } : {}}
+                >
+                    Analizar
+                </button>
+                <button
+                    className="action-btn"
                     onClick={() => setTab('historico')}
                     style={tab === 'historico' ? { background: 'hsl(var(--primary))', color: '#f5f1ea', borderColor: 'hsl(var(--primary))' } : {}}
                 >
@@ -583,6 +637,138 @@ function VariacionCostosContent() {
                     Visualizar Archivo
                 </button>
             </div>
+
+            {tab === 'analisis' && (
+                <>
+                    <div style={{ ...sectionStyle, marginBottom: '1.5rem' }}>
+                        <h2 style={{ margin: '0 0 0.25rem', fontSize: '1rem' }}>Análisis de Variación de Costos</h2>
+                        {!ultimoRun ? (
+                            <p style={{ fontSize: '0.85rem', color: 'hsl(var(--muted-foreground))' }}>
+                                Todavía no hay ningún preanálisis registrado — corre cuando llega correo nuevo de SAP.
+                            </p>
+                        ) : (
+                            <>
+                                <p style={{ margin: '0 0 1.25rem', fontSize: '0.78rem', color: 'hsl(var(--muted-foreground))' }}>
+                                    Última actualización: {ultimaSync ? new Date(ultimaSync).toLocaleString('es-CO') : '—'}
+                                    {' · '}Último preanálisis: {new Date(ultimoRun.iniciado_en).toLocaleString('es-CO')}
+                                    {ultimoRun.estado_run === 'error' && <span style={{ color: '#ef4444', fontWeight: 600 }}> · Terminó con error</span>}
+                                </p>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
+                                    {[
+                                        { icon: <PackageSearch size={16} style={{ opacity: 0.5 }} />, label: 'Registros recibidos', value: ultimoRun.total_recibidos },
+                                        { icon: <CheckCircle2 size={16} color="#10b981" />, label: 'Finalizados automático', value: ultimoRun.total_auto_finalizado, color: '#10b981' },
+                                        { icon: <AlertCircle size={16} style={{ opacity: 0.5 }} />, label: 'No aplica', value: ultimoRun.total_no_aplica },
+                                        { icon: <AlertTriangle size={16} color="#ef4444" />, label: 'Pendientes', value: ultimoRun.total_pendiente, color: '#ef4444' },
+                                        { icon: <Loader2 size={16} style={{ opacity: 0.5 }} />, label: 'En análisis', value: ultimoRun.total_en_analisis },
+                                        { icon: <AlertTriangle size={16} color="#f59e0b" />, label: 'Nuevos pendientes', value: ultimoRun.total_nuevos_pendientes, color: '#f59e0b' },
+                                    ].map((k, i) => (
+                                        <div key={i} className="stat-card card">
+                                            {k.icon}
+                                            <div style={{ flex: 1 }}>
+                                                <div className="stat-label">{k.label}</div>
+                                                <div className="stat-value" style={{ fontSize: '1.05rem', color: k.color }}>{k.value.toLocaleString('es-CO')}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                                    {[
+                                        { label: 'Prioridad Alta', value: ultimoRun.prioridad_alta, color: PRIORIDAD_COLOR.Alta },
+                                        { label: 'Prioridad Media', value: ultimoRun.prioridad_media, color: PRIORIDAD_COLOR.Media },
+                                        { label: 'Prioridad Baja', value: ultimoRun.prioridad_baja, color: PRIORIDAD_COLOR.Baja },
+                                        { label: 'Impacto económico pendiente', value: fmt(ultimoRun.impacto_pendiente_total) },
+                                    ].map((k, i) => (
+                                        <div key={i} className="stat-card card">
+                                            <div style={{ flex: 1 }}>
+                                                <div className="stat-label">{k.label}</div>
+                                                <div className="stat-value" style={{ fontSize: '1.05rem', color: k.color }}>{k.value}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <button className="btn-primary" style={{ width: 'auto' }} onClick={() => setMostrarPendientes(v => !v)}>
+                                    {mostrarPendientes ? 'Ocultar casos pendientes' : 'Ver casos pendientes'}
+                                </button>
+                            </>
+                        )}
+                    </div>
+
+                    {mostrarPendientes && (
+                        <div style={sectionStyle}>
+                            <h2 style={{ margin: '0 0 1.25rem 0', fontSize: '1rem' }}>
+                                Casos Pendientes ({pendientesOrdenados.length.toLocaleString('es-CO')}) — ordenados por prioridad
+                            </h2>
+                            <div className="admin-table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th></th><th>Prioridad</th><th>Fecha</th><th>Proveedor</th><th>Ítem</th>
+                                            <th>Precio</th><th>Precio Prom.</th><th>Penúltimo</th><th>% Variación</th>
+                                            <th>Total Línea</th><th>Impacto Acum.</th><th>Último Costo</th><th>Estado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {pendientesOrdenados.length === 0 ? (
+                                            <tr><td colSpan={13} style={{ textAlign: 'center', padding: '2rem', opacity: 0.5 }}>No hay casos pendientes.</td></tr>
+                                        ) : pendientesOrdenados.map(r => {
+                                            const expanded = expandedPendienteId === r.id
+                                            return (
+                                                <Fragment key={r.id}>
+                                                    <tr style={{ cursor: 'pointer' }} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>
+                                                        <td>{expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</td>
+                                                        <td>
+                                                            <span style={{
+                                                                fontSize: '0.7rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '99px',
+                                                                background: `${PRIORIDAD_COLOR[r.prioridad ?? ''] ?? '#999'}18`,
+                                                                color: PRIORIDAD_COLOR[r.prioridad ?? ''] ?? '#999'
+                                                            }}>{r.prioridad ?? '—'}</span>
+                                                        </td>
+                                                        <td style={{ fontSize: '0.8rem' }}>{fmtDate(r.fecha_correo)}</td>
+                                                        <td style={{ fontSize: '0.8rem' }}>{r.descripcion_proveedor || r.cod_proveedor || '—'}</td>
+                                                        <td style={{ fontSize: '0.8rem' }}>{r.descripcion_item || r.cod_item || '—'}</td>
+                                                        <td style={{ fontSize: '0.85rem' }}>{fmt(r.precio)}</td>
+                                                        <td style={{ fontSize: '0.85rem' }}>{fmt(r.precio_prom_almacen)}</td>
+                                                        <td style={{ fontSize: '0.85rem' }}>{fmt(r.penultimo_precio_prov)}</td>
+                                                        <td style={{ fontWeight: 600, fontSize: '0.85rem' }}>{fmtPct(r.porc_variacion)}</td>
+                                                        <td style={{ fontSize: '0.85rem' }}>{fmt(r.total_linea)}</td>
+                                                        <td style={{ fontSize: '0.85rem', fontWeight: 600 }}>{fmt(r.impacto_acumulado_grupo)}</td>
+                                                        <td style={{ fontSize: '0.8rem' }}>
+                                                            {r.ultimo_costo_historico !== null ? <>{fmt(r.ultimo_costo_historico)} <span style={{ opacity: 0.5 }}>({fmtDate(r.fecha_ultimo_costo_historico)})</span></> : '—'}
+                                                        </td>
+                                                        <td onClick={e => e.stopPropagation()}>
+                                                            <select
+                                                                className="form-control"
+                                                                style={{ fontSize: '0.78rem', padding: '0.3rem 0.5rem' }}
+                                                                value={r.estado || ''}
+                                                                onChange={e => updateRow(r.id, 'estado', e.target.value)}
+                                                            >
+                                                                {ESTADOS_EDITABLES.map(e => <option key={e} value={e}>{e}</option>)}
+                                                            </select>
+                                                        </td>
+                                                    </tr>
+                                                    {expanded && (
+                                                        <tr>
+                                                            <td colSpan={13} style={{ background: 'hsla(204, 38%, 24%, 0.03)' }}>
+                                                                <div style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem' }}>
+                                                                    <strong>¿Por qué llegó aquí?</strong>
+                                                                    <p style={{ margin: '0.35rem 0 0' }}>{r.motivo_alerta || 'Sin explicación registrada.'}</p>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </Fragment>
+                                            )
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+                </>
+            )}
 
             {tab === 'historico' && (
                 <>
@@ -733,7 +919,7 @@ function VariacionCostosContent() {
                                         const expanded = expandedId === r.id
                                         const origen = origenProveedor(r.cod_proveedor)
                                         const tablero = esTablero(r.descripcion_item)
-                                        const estancado = r.estado === 'En proceso' && (r.revisiones_en_proceso || 0) >= ESTANCADO_UMBRAL
+                                        const estancado = r.estado === 'En análisis' && (r.revisiones_en_proceso || 0) >= ESTANCADO_UMBRAL
                                         return (
                                             <Fragment key={r.id}>
                                                 <tr style={{ cursor: 'pointer' }} onClick={() => setExpandedId(expanded ? null : r.id)}>
