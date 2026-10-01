@@ -485,18 +485,46 @@ function VariacionCostosContent() {
     }, [filteredBase, vista, fEstado])
 
     // Bandeja de análisis humano: todos los Pendiente, sin los filtros del histórico —
-    // es una cola aparte, ordenada por prioridad y luego por impacto acumulado.
+    // es una cola aparte, ordenada por prioridad y luego por impacto acumulado. Los
+    // filtros se cruzan entre sí: las opciones de cada uno se calculan respetando los
+    // demás filtros activos (si filtro un proveedor, Ítem solo ofrece sus materiales).
     const PRIORIDAD_ORDEN: Record<string, number> = { Alta: 0, Media: 1, Baja: 2 }
+    const pendProveedorDisplay = (r: VariacionRow) => r.descripcion_proveedor || r.cod_proveedor || 'Sin proveedor'
+    const pendItemDisplay = (r: VariacionRow) => r.descripcion_item || r.cod_item || 'Sin ítem'
+    const pendPrioridadDisplay = (r: VariacionRow) => r.prioridad || 'Sin prioridad'
+
+    const [pendFilters, setPendFilters] = useState<{ proveedor: string[]; item: string[]; prioridad: string[] }>({ proveedor: [], item: [], prioridad: [] })
+
+    const pendientesBase = useMemo(() => rows.filter(r => r.estado === 'Pendiente'), [rows])
+
+    const aplicarFiltrosPendientes = (base: VariacionRow[], filtros: typeof pendFilters, excluir?: keyof typeof pendFilters) => {
+        return base.filter(r => {
+            if (excluir !== 'proveedor' && filtros.proveedor.length && !filtros.proveedor.includes(pendProveedorDisplay(r))) return false
+            if (excluir !== 'item' && filtros.item.length && !filtros.item.includes(pendItemDisplay(r))) return false
+            if (excluir !== 'prioridad' && filtros.prioridad.length && !filtros.prioridad.includes(pendPrioridadDisplay(r))) return false
+            return true
+        })
+    }
+
+    const buildOptions = (excluir: keyof typeof pendFilters, display: (r: VariacionRow) => string) => {
+        const set = new Set<string>()
+        aplicarFiltrosPendientes(pendientesBase, pendFilters, excluir).forEach(r => set.add(display(r)))
+        return Array.from(set).sort().map(v => ({ display: v, raw: null as number | string | null }))
+    }
+
+    const pendProveedorOptions = useMemo(() => buildOptions('proveedor', pendProveedorDisplay), [pendientesBase, pendFilters])
+    const pendItemOptions = useMemo(() => buildOptions('item', pendItemDisplay), [pendientesBase, pendFilters])
+    const pendPrioridadOptions = useMemo(() => buildOptions('prioridad', pendPrioridadDisplay), [pendientesBase, pendFilters])
+
     const pendientesOrdenados = useMemo(() => {
-        return rows
-            .filter(r => r.estado === 'Pendiente')
+        return aplicarFiltrosPendientes(pendientesBase, pendFilters)
             .sort((a, b) => {
                 const pa = PRIORIDAD_ORDEN[a.prioridad ?? ''] ?? 3
                 const pb = PRIORIDAD_ORDEN[b.prioridad ?? ''] ?? 3
                 if (pa !== pb) return pa - pb
                 return (b.impacto_acumulado_grupo ?? 0) - (a.impacto_acumulado_grupo ?? 0)
             })
-    }, [rows])
+    }, [pendientesBase, pendFilters])
 
     const totalRegistros = filtered.length
     const incrementos = filtered.filter(r => (r.porc_variacion ?? 0) > 0).length
@@ -698,32 +726,53 @@ function VariacionCostosContent() {
 
                     {mostrarPendientes && (
                         <div style={sectionStyle}>
-                            <h2 style={{ margin: '0 0 1.25rem 0', fontSize: '1rem' }}>
-                                Casos Pendientes ({pendientesOrdenados.length.toLocaleString('es-CO')}) — ordenados por prioridad
-                            </h2>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                                <h2 style={{ margin: 0, fontSize: '1rem' }}>
+                                    Casos Pendientes ({pendientesOrdenados.length.toLocaleString('es-CO')} de {pendientesBase.length.toLocaleString('es-CO')}) — ordenados por prioridad
+                                </h2>
+                                {(pendFilters.proveedor.length > 0 || pendFilters.item.length > 0 || pendFilters.prioridad.length > 0) && (
+                                    <button className="action-btn" style={{ fontSize: '0.78rem' }} onClick={() => setPendFilters({ proveedor: [], item: [], prioridad: [] })}>Limpiar filtros</button>
+                                )}
+                            </div>
+                            <p style={{ margin: '0 0 1.25rem', fontSize: '0.78rem', color: 'hsl(var(--muted-foreground))' }}>
+                                Haz clic en una fila para ver por qué llegó aquí y el resto del detalle. Los filtros se cruzan entre sí.
+                            </p>
                             <div className="admin-table-container">
                                 <table>
                                     <thead>
                                         <tr>
                                             <th></th><th>Prioridad</th><th>Fecha</th><th>Proveedor</th><th>Ítem</th>
-                                            <th>Precio</th><th>Precio Prom.</th><th>Penúltimo</th><th>% Variación</th>
-                                            <th>Total Línea</th><th>Impacto Acum.</th><th>Último Costo</th><th>Estado</th>
+                                            <th>Precio</th><th>% Variación</th><th>Impacto Acum.</th><th>Estado</th>
+                                            <th style={{ minWidth: 180 }}>Observación</th>
+                                        </tr>
+                                        <tr>
+                                            <th></th>
+                                            <th style={{ padding: '0.3rem' }}>
+                                                <ColumnFilterSelect options={pendPrioridadOptions} value={pendFilters.prioridad} onChange={v => setPendFilters(p => ({ ...p, prioridad: v }))} />
+                                            </th>
+                                            <th></th>
+                                            <th style={{ padding: '0.3rem' }}>
+                                                <ColumnFilterSelect options={pendProveedorOptions} value={pendFilters.proveedor} onChange={v => setPendFilters(p => ({ ...p, proveedor: v }))} />
+                                            </th>
+                                            <th style={{ padding: '0.3rem' }}>
+                                                <ColumnFilterSelect options={pendItemOptions} value={pendFilters.item} onChange={v => setPendFilters(p => ({ ...p, item: v }))} />
+                                            </th>
+                                            <th></th><th></th><th></th><th></th><th></th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {pendientesOrdenados.length === 0 ? (
-                                            <tr><td colSpan={13} style={{ textAlign: 'center', padding: '2rem', opacity: 0.5 }}>No hay casos pendientes.</td></tr>
+                                            <tr><td colSpan={10} style={{ textAlign: 'center', padding: '2rem', opacity: 0.5 }}>Sin casos pendientes con estos filtros.</td></tr>
                                         ) : pendientesOrdenados.map(r => {
                                             const expanded = expandedPendienteId === r.id
                                             const esAlertaMillonaria = (r.impacto_acumulado_grupo ?? 0) >= 1_000_000
                                             return (
                                                 <Fragment key={r.id}>
-                                                    <tr
-                                                        style={{ cursor: 'pointer', background: esAlertaMillonaria ? 'rgba(239,68,68,0.05)' : undefined }}
-                                                        onClick={() => setExpandedPendienteId(expanded ? null : r.id)}
-                                                    >
-                                                        <td>{expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</td>
-                                                        <td>
+                                                    <tr style={{ background: esAlertaMillonaria ? 'rgba(239,68,68,0.05)' : undefined }}>
+                                                        <td style={{ cursor: 'pointer' }} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>
+                                                            {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                                        </td>
+                                                        <td style={{ cursor: 'pointer' }} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>
                                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', alignItems: 'flex-start' }}>
                                                                 <span style={{
                                                                     fontSize: '0.7rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '99px',
@@ -737,19 +786,17 @@ function VariacionCostosContent() {
                                                                 )}
                                                             </div>
                                                         </td>
-                                                        <td style={{ fontSize: '0.8rem' }}>{fmtDate(r.fecha_correo)}</td>
-                                                        <td style={{ fontSize: '0.8rem' }}>{r.descripcion_proveedor || r.cod_proveedor || '—'}</td>
-                                                        <td style={{ fontSize: '0.8rem' }}>{r.descripcion_item || r.cod_item || '—'}</td>
-                                                        <td style={{ fontSize: '0.85rem' }}>{fmt(r.precio)}</td>
-                                                        <td style={{ fontSize: '0.85rem' }}>{fmt(r.precio_prom_almacen)}</td>
-                                                        <td style={{ fontSize: '0.85rem' }}>{fmt(r.penultimo_precio_prov)}</td>
-                                                        <td style={{ fontWeight: 600, fontSize: '0.85rem' }}>{fmtPct(r.porc_variacion)}</td>
-                                                        <td style={{ fontSize: '0.85rem' }}>{fmt(r.total_linea)}</td>
-                                                        <td style={{ fontSize: '0.85rem', fontWeight: 600 }}>{fmt(r.impacto_acumulado_grupo)}</td>
-                                                        <td style={{ fontSize: '0.8rem' }}>
-                                                            {r.ultimo_costo_historico !== null ? <>{fmt(r.ultimo_costo_historico)} <span style={{ opacity: 0.5 }}>({fmtDate(r.fecha_ultimo_costo_historico)})</span></> : '—'}
+                                                        <td style={{ fontSize: '0.8rem', cursor: 'pointer' }} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>{fmtDate(r.fecha_correo)}</td>
+                                                        <td style={{ fontSize: '0.8rem', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }} title={pendProveedorDisplay(r)} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>
+                                                            {pendProveedorDisplay(r)}
                                                         </td>
-                                                        <td onClick={e => e.stopPropagation()}>
+                                                        <td style={{ fontSize: '0.8rem', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }} title={pendItemDisplay(r)} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>
+                                                            {pendItemDisplay(r)}
+                                                        </td>
+                                                        <td style={{ fontSize: '0.85rem', cursor: 'pointer' }} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>{fmt(r.precio)}</td>
+                                                        <td style={{ fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>{fmtPct(r.porc_variacion)}</td>
+                                                        <td style={{ fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>{fmt(r.impacto_acumulado_grupo)}</td>
+                                                        <td>
                                                             <select
                                                                 className="form-control"
                                                                 style={{ fontSize: '0.78rem', padding: '0.3rem 0.5rem' }}
@@ -759,13 +806,34 @@ function VariacionCostosContent() {
                                                                 {ESTADOS_EDITABLES.map(e => <option key={e} value={e}>{e}</option>)}
                                                             </select>
                                                         </td>
+                                                        <td>
+                                                            <input
+                                                                key={`pend-obs-${r.id}`}
+                                                                className="form-control"
+                                                                style={{ fontSize: '0.78rem', padding: '0.35rem 0.5rem', minWidth: 160 }}
+                                                                defaultValue={r.obs_nl || ''}
+                                                                placeholder="Agregar observación..."
+                                                                onBlur={e => { if (e.target.value !== (r.obs_nl || '')) updateRow(r.id, 'obs_nl', e.target.value) }}
+                                                            />
+                                                        </td>
                                                     </tr>
                                                     {expanded && (
                                                         <tr>
-                                                            <td colSpan={13} style={{ background: 'hsla(204, 38%, 24%, 0.03)' }}>
+                                                            <td colSpan={10} style={{ background: 'hsla(204, 38%, 24%, 0.03)' }}>
                                                                 <div style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem' }}>
                                                                     <strong>¿Por qué llegó aquí?</strong>
-                                                                    <p style={{ margin: '0.35rem 0 0' }}>{r.motivo_alerta || 'Sin explicación registrada.'}</p>
+                                                                    <p style={{ margin: '0.35rem 0 1rem' }}>{r.motivo_alerta || 'Sin explicación registrada.'}</p>
+                                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
+                                                                        <div><strong>Precio Prom.:</strong> {fmt(r.precio_prom_almacen)}</div>
+                                                                        <div><strong>Penúltimo Precio:</strong> {fmt(r.penultimo_precio_prov)}</div>
+                                                                        <div><strong>Cantidad:</strong> {r.cantidad ?? '—'}</div>
+                                                                        <div><strong>Total Línea:</strong> {fmt(r.total_linea)}</div>
+                                                                        <div>
+                                                                            <strong>Último Costo Histórico:</strong>{' '}
+                                                                            {r.ultimo_costo_historico !== null ? <>{fmt(r.ultimo_costo_historico)} ({fmtDate(r.fecha_ultimo_costo_historico)})</> : '—'}
+                                                                        </div>
+                                                                        <div><strong># Documento:</strong> {r.numero_documento || '—'}</div>
+                                                                    </div>
                                                                 </div>
                                                             </td>
                                                         </tr>
