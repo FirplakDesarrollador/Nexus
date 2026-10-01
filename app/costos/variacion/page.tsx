@@ -801,7 +801,17 @@ function VariacionCostosContent() {
                                                                 className="form-control"
                                                                 style={{ fontSize: '0.78rem', padding: '0.3rem 0.5rem' }}
                                                                 value={r.estado || ''}
-                                                                onChange={e => updateRow(r.id, 'estado', e.target.value)}
+                                                                onChange={e => {
+                                                                    const nuevoEstado = e.target.value
+                                                                    if (nuevoEstado === 'Finalizado') {
+                                                                        const confirmado = window.confirm('¿Estás seguro de finalizar este análisis? El caso se cerrará y saldrá de la bandeja de pendientes.')
+                                                                        if (!confirmado) {
+                                                                            e.target.value = r.estado || '' // se queda en "Pendiente" para seguir analizándolo
+                                                                            return
+                                                                        }
+                                                                    }
+                                                                    updateRow(r.id, 'estado', nuevoEstado)
+                                                                }}
                                                             >
                                                                 {ESTADOS_EDITABLES.map(e => <option key={e} value={e}>{e}</option>)}
                                                             </select>
