@@ -351,6 +351,7 @@ function VariacionCostosContent() {
     const [ultimoRun, setUltimoRun] = useState<AnalisisRun | null>(null)
     const [mostrarPendientes, setMostrarPendientes] = useState(false)
     const [expandedPendienteId, setExpandedPendienteId] = useState<string | null>(null)
+    const [confirmFinalizar, setConfirmFinalizar] = useState<VariacionRow | null>(null)
     const [msStatus, setMsStatus] = useState<MsStatus | null>(null)
     const [msMsg, setMsMsg] = useState<string | null>(null)
     const [checkingCorreos, setCheckingCorreos] = useState(false)
@@ -804,11 +805,9 @@ function VariacionCostosContent() {
                                                                 onChange={e => {
                                                                     const nuevoEstado = e.target.value
                                                                     if (nuevoEstado === 'Finalizado') {
-                                                                        const confirmado = window.confirm('¿Estás seguro de finalizar este análisis? El caso se cerrará y saldrá de la bandeja de pendientes.')
-                                                                        if (!confirmado) {
-                                                                            e.target.value = r.estado || '' // se queda en "Pendiente" para seguir analizándolo
-                                                                            return
-                                                                        }
+                                                                        e.target.value = r.estado || '' // se queda en "Pendiente" mientras se confirma
+                                                                        setConfirmFinalizar(r)
+                                                                        return
                                                                     }
                                                                     updateRow(r.id, 'estado', nuevoEstado)
                                                                 }}
@@ -1276,6 +1275,51 @@ function VariacionCostosContent() {
                         )}
                     </div>
                 </>
+            )}
+
+            {confirmFinalizar && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', zIndex: 9999, padding: '2rem' }}>
+                    <div className="modal-content animate-scale-in" style={{
+                        background: 'hsl(var(--card))',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '16px',
+                        maxWidth: 420,
+                        width: '100%',
+                        padding: '2rem',
+                        textAlign: 'center',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '1rem',
+                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)'
+                    }}>
+                        <div style={{
+                            background: 'rgba(16,185,129,0.1)', color: '#10b981', padding: '1rem',
+                            borderRadius: '50%', display: 'inline-flex', marginBottom: '0.25rem'
+                        }}>
+                            <CheckCircle2 size={28} />
+                        </div>
+                        <h2 style={{ fontSize: '1.15rem', margin: 0 }}>¿Finalizar este análisis?</h2>
+                        <p style={{ opacity: 0.7, fontSize: '0.88rem', margin: 0, lineHeight: 1.5 }}>
+                            <strong>{confirmFinalizar.descripcion_item || confirmFinalizar.cod_item}</strong> ({confirmFinalizar.descripcion_proveedor || confirmFinalizar.cod_proveedor}) se cerrará y saldrá de la bandeja de pendientes.
+                        </p>
+                        <div style={{ display: 'flex', gap: '1rem', width: '100%', marginTop: '0.5rem' }}>
+                            <button className="action-btn" style={{ flex: 1 }} onClick={() => setConfirmFinalizar(null)}>
+                                Cancelar
+                            </button>
+                            <button
+                                className="action-btn"
+                                style={{ flex: 1, background: '#10b981', color: 'white', border: 'none', fontWeight: 600 }}
+                                onClick={() => {
+                                    updateRow(confirmFinalizar.id, 'estado', 'Finalizado')
+                                    setConfirmFinalizar(null)
+                                }}
+                            >
+                                Sí, finalizar
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     )
