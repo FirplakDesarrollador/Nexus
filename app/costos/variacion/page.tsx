@@ -1,6 +1,7 @@
 'use client'
 
 import { Fragment, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { createClient } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
@@ -1277,9 +1278,9 @@ function VariacionCostosContent() {
                 </>
             )}
 
-            {confirmFinalizar && (
+            {confirmFinalizar && createPortal(
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', zIndex: 9999, padding: '2rem' }}>
-                    <div className="modal-content animate-scale-in" style={{
+                    <div className="animate-scale-in" style={{
                         background: 'hsl(var(--card))',
                         border: '1px solid hsl(var(--border))',
                         borderRadius: '16px',
@@ -1294,13 +1295,13 @@ function VariacionCostosContent() {
                         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)'
                     }}>
                         <div style={{
-                            background: 'rgba(16,185,129,0.1)', color: '#10b981', padding: '1rem',
+                            background: 'hsl(var(--primary) / 0.1)', color: 'hsl(var(--primary))', padding: '1rem',
                             borderRadius: '50%', display: 'inline-flex', marginBottom: '0.25rem'
                         }}>
                             <CheckCircle2 size={28} />
                         </div>
-                        <h2 style={{ fontSize: '1.15rem', margin: 0 }}>¿Finalizar este análisis?</h2>
-                        <p style={{ opacity: 0.7, fontSize: '0.88rem', margin: 0, lineHeight: 1.5 }}>
+                        <h2 style={{ fontSize: '1.15rem', margin: 0, color: 'hsl(var(--foreground))' }}>¿Finalizar este análisis?</h2>
+                        <p style={{ opacity: 0.7, fontSize: '0.88rem', margin: 0, lineHeight: 1.5, color: 'hsl(var(--foreground))' }}>
                             <strong>{confirmFinalizar.descripcion_item || confirmFinalizar.cod_item}</strong> ({confirmFinalizar.descripcion_proveedor || confirmFinalizar.cod_proveedor}) se cerrará y saldrá de la bandeja de pendientes.
                         </p>
                         <div style={{ display: 'flex', gap: '1rem', width: '100%', marginTop: '0.5rem' }}>
@@ -1309,7 +1310,7 @@ function VariacionCostosContent() {
                             </button>
                             <button
                                 className="action-btn"
-                                style={{ flex: 1, background: '#10b981', color: 'white', border: 'none', fontWeight: 600 }}
+                                style={{ flex: 1, background: 'hsl(var(--primary))', color: '#f5f1ea', border: 'none', fontWeight: 600 }}
                                 onClick={() => {
                                     updateRow(confirmFinalizar.id, 'estado', 'Finalizado')
                                     setConfirmFinalizar(null)
@@ -1319,7 +1320,8 @@ function VariacionCostosContent() {
                             </button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     )
