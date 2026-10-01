@@ -715,16 +715,27 @@ function VariacionCostosContent() {
                                             <tr><td colSpan={13} style={{ textAlign: 'center', padding: '2rem', opacity: 0.5 }}>No hay casos pendientes.</td></tr>
                                         ) : pendientesOrdenados.map(r => {
                                             const expanded = expandedPendienteId === r.id
+                                            const esAlertaMillonaria = (r.impacto_acumulado_grupo ?? 0) >= 1_000_000
                                             return (
                                                 <Fragment key={r.id}>
-                                                    <tr style={{ cursor: 'pointer' }} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>
+                                                    <tr
+                                                        style={{ cursor: 'pointer', background: esAlertaMillonaria ? 'rgba(239,68,68,0.05)' : undefined }}
+                                                        onClick={() => setExpandedPendienteId(expanded ? null : r.id)}
+                                                    >
                                                         <td>{expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</td>
                                                         <td>
-                                                            <span style={{
-                                                                fontSize: '0.7rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '99px',
-                                                                background: `${PRIORIDAD_COLOR[r.prioridad ?? ''] ?? '#999'}18`,
-                                                                color: PRIORIDAD_COLOR[r.prioridad ?? ''] ?? '#999'
-                                                            }}>{r.prioridad ?? '—'}</span>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', alignItems: 'flex-start' }}>
+                                                                <span style={{
+                                                                    fontSize: '0.7rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '99px',
+                                                                    background: `${PRIORIDAD_COLOR[r.prioridad ?? ''] ?? '#999'}18`,
+                                                                    color: PRIORIDAD_COLOR[r.prioridad ?? ''] ?? '#999'
+                                                                }}>{r.prioridad ?? '—'}</span>
+                                                                {esAlertaMillonaria && (
+                                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.65rem', fontWeight: 700, color: '#ef4444' }}>
+                                                                        <AlertTriangle size={10} /> ALERTA &gt;$1M
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                         </td>
                                                         <td style={{ fontSize: '0.8rem' }}>{fmtDate(r.fecha_correo)}</td>
                                                         <td style={{ fontSize: '0.8rem' }}>{r.descripcion_proveedor || r.cod_proveedor || '—'}</td>

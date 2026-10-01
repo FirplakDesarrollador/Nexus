@@ -13,6 +13,8 @@ const BI_TOLERANCIA_RELATIVA = 0.005 // 0.5%
 const BI_TOLERANCIA_ABSOLUTA = 1 // $1
 
 export const ENTRADA_MERCANCIA = 'Entrada de Mercacía' // sic — typo ya existente en producción
+const ORDEN_COMPRA = 'Orden de Compra'
+const PRECIOS_DE_ENTREGA = 'Precios de Entrega' // lista de precios de proveedores del exterior, no es una compra real
 
 const PRIORIDAD_ALTA_UMBRAL = 1_000_000
 const PRIORIDAD_MEDIA_UMBRAL = 300_000
@@ -133,6 +135,28 @@ export async function ejecutarPreanalisis(): Promise<{ runId: string; resumen: R
             if (!actual || (r.fecha_contabilizacion ?? '') > (actual.fecha_contabilizacion ?? '')) {
                 biPorClave.set(clave, r)
             }
+        }
+
+        // Orden de Compra y Precios de Entrega no entran al árbol de decisión (no son
+        // una entrada de mercancía real), pero tampoco se dejan en blanco — quedan
+        // explícitamente "No aplica" para que no se vean como pendientes en ningún
+        // lado de la app. No se cuentan en el resumen de la corrida (ese resumen es
+        // solo sobre Entrada de Mercacía).
+        const filasExcluidas = todasLasFilas.filter(r =>
+            (r.tipo_documento === ORDEN_COMPRA || r.tipo_documento === PRECIOS_DE_ENTREGA) && r.estado !== 'No aplica'
+        )
+        for (let i = 0; i < filasExcluidas.length; i += 500) {
+            const lote = filasExcluidas.slice(i, i + 500).map(r => ({
+                id: r.id,
+                estado: 'No aplica' as const,
+                obs_nl: r.tipo_documento === ORDEN_COMPRA
+                    ? 'No aplica — Orden de Compra, no es una entrada de mercancía.'
+                    : 'No aplica — Lista de precios de proveedor del exterior, no es una compra real.',
+                origen_cierre: 'auto_excluido' as const,
+                analizado_en: new Date().toISOString()
+            }))
+            const { error } = await supabase.from('variacion_costos').upsert(lote, { onConflict: 'id' })
+            if (error) throw new Error(`Error excluyendo Orden de Compra/Precios de Entrega (lote ${i}): ${error.message}`)
         }
 
         const filasEntrada = todasLasFilas.filter(r => r.tipo_documento === ENTRADA_MERCANCIA)
