@@ -742,7 +742,7 @@ function VariacionCostosContent() {
                                 <table>
                                     <thead>
                                         <tr>
-                                            <th></th><th>Prioridad</th><th>Fecha</th><th>Proveedor</th><th>Ítem</th>
+                                            <th></th><th>Prioridad</th><th>Código</th><th>Proveedor</th><th>Ítem</th>
                                             <th>Precio</th><th>% Variación</th><th>Impacto Acum.</th><th>Estado</th>
                                             <th style={{ minWidth: 180 }}>Observación</th>
                                         </tr>
@@ -787,7 +787,7 @@ function VariacionCostosContent() {
                                                                 )}
                                                             </div>
                                                         </td>
-                                                        <td style={{ fontSize: '0.8rem', cursor: 'pointer' }} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>{fmtDate(r.fecha_correo)}</td>
+                                                        <td style={{ fontSize: '0.8rem', cursor: 'pointer' }} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>{r.cod_item || '—'}</td>
                                                         <td style={{ fontSize: '0.8rem', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }} title={pendProveedorDisplay(r)} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>
                                                             {pendProveedorDisplay(r)}
                                                         </td>
@@ -833,6 +833,7 @@ function VariacionCostosContent() {
                                                                     <strong>¿Por qué llegó aquí?</strong>
                                                                     <p style={{ margin: '0.35rem 0 1rem' }}>{r.motivo_alerta || 'Sin explicación registrada.'}</p>
                                                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
+                                                                        <div><strong>Fecha:</strong> {fmtDate(r.fecha_correo)}</div>
                                                                         <div><strong>Precio Prom.:</strong> {fmt(r.precio_prom_almacen)}</div>
                                                                         <div><strong>Penúltimo Precio:</strong> {fmt(r.penultimo_precio_prov)}</div>
                                                                         <div><strong>Cantidad:</strong> {r.cantidad ?? '—'}</div>
