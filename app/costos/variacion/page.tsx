@@ -85,6 +85,10 @@ const ESTANCADO_UMBRAL = 3
 const SIN_ESTADO = 'Sin estado'
 const ESTADOS_EDITABLES = ['Pendiente', 'En análisis', 'Finalizado', 'No aplica']
 const PRIORIDAD_COLOR: Record<string, string> = { Alta: '#ef4444', Media: '#f59e0b', Baja: '#10b981' }
+
+// TEMPORAL — para demos: muestra el resumen de "Analizar" en cero y deshabilita la
+// bandeja de pendientes, sin tocar la lógica real. Para revertir, poner en false.
+const ANALISIS_DEMO_MODE = true
 const NALLELY_EMAIL = 'nallely.lopera@firplak.com'
 
 const fmt = (n: number | null | undefined) => n === null || n === undefined ? '—' : `$${Math.round(n).toLocaleString('es-CO')}`
@@ -686,12 +690,12 @@ function VariacionCostosContent() {
 
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
                                     {[
-                                        { icon: <PackageSearch size={16} style={{ opacity: 0.5 }} />, label: 'Registros recibidos', value: ultimoRun.total_recibidos },
-                                        { icon: <CheckCircle2 size={16} color="#10b981" />, label: 'Finalizados automático', value: ultimoRun.total_auto_finalizado, color: '#10b981' },
-                                        { icon: <AlertCircle size={16} style={{ opacity: 0.5 }} />, label: 'No aplica', value: ultimoRun.total_no_aplica },
-                                        { icon: <AlertTriangle size={16} color="#ef4444" />, label: 'Pendientes', value: ultimoRun.total_pendiente, color: '#ef4444' },
-                                        { icon: <Loader2 size={16} style={{ opacity: 0.5 }} />, label: 'En análisis', value: ultimoRun.total_en_analisis },
-                                        { icon: <AlertTriangle size={16} color="#f59e0b" />, label: 'Nuevos pendientes', value: ultimoRun.total_nuevos_pendientes, color: '#f59e0b' },
+                                        { icon: <PackageSearch size={16} style={{ opacity: 0.5 }} />, label: 'Registros recibidos', value: ANALISIS_DEMO_MODE ? 0 : ultimoRun.total_recibidos },
+                                        { icon: <CheckCircle2 size={16} color="#10b981" />, label: 'Finalizados automático', value: ANALISIS_DEMO_MODE ? 0 : ultimoRun.total_auto_finalizado, color: '#10b981' },
+                                        { icon: <AlertCircle size={16} style={{ opacity: 0.5 }} />, label: 'No aplica', value: ANALISIS_DEMO_MODE ? 0 : ultimoRun.total_no_aplica },
+                                        { icon: <AlertTriangle size={16} color="#ef4444" />, label: 'Pendientes', value: ANALISIS_DEMO_MODE ? 0 : ultimoRun.total_pendiente, color: '#ef4444' },
+                                        { icon: <Loader2 size={16} style={{ opacity: 0.5 }} />, label: 'En análisis', value: ANALISIS_DEMO_MODE ? 0 : ultimoRun.total_en_analisis },
+                                        { icon: <AlertTriangle size={16} color="#f59e0b" />, label: 'Nuevos pendientes', value: ANALISIS_DEMO_MODE ? 0 : ultimoRun.total_nuevos_pendientes, color: '#f59e0b' },
                                     ].map((k, i) => (
                                         <div key={i} className="stat-card card">
                                             {k.icon}
@@ -705,9 +709,9 @@ function VariacionCostosContent() {
 
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
                                     {[
-                                        { label: 'Prioridad Alta', value: ultimoRun.prioridad_alta, color: PRIORIDAD_COLOR.Alta },
-                                        { label: 'Prioridad Media', value: ultimoRun.prioridad_media, color: PRIORIDAD_COLOR.Media },
-                                        { label: 'Prioridad Baja', value: ultimoRun.prioridad_baja, color: PRIORIDAD_COLOR.Baja },
+                                        { label: 'Prioridad Alta', value: ANALISIS_DEMO_MODE ? 0 : ultimoRun.prioridad_alta, color: PRIORIDAD_COLOR.Alta },
+                                        { label: 'Prioridad Media', value: ANALISIS_DEMO_MODE ? 0 : ultimoRun.prioridad_media, color: PRIORIDAD_COLOR.Media },
+                                        { label: 'Prioridad Baja', value: ANALISIS_DEMO_MODE ? 0 : ultimoRun.prioridad_baja, color: PRIORIDAD_COLOR.Baja },
                                     ].map((k, i) => (
                                         <div key={i} className="stat-card card">
                                             <div style={{ flex: 1 }}>
@@ -718,9 +722,15 @@ function VariacionCostosContent() {
                                     ))}
                                 </div>
 
-                                <button className="btn-primary" style={{ width: 'auto' }} onClick={() => setMostrarPendientes(v => !v)}>
-                                    {mostrarPendientes ? 'Ocultar casos pendientes' : 'Ver casos pendientes'}
-                                </button>
+                                {ANALISIS_DEMO_MODE ? (
+                                    <button className="btn-primary" style={{ width: 'auto', opacity: 0.6, cursor: 'not-allowed' }} disabled>
+                                        Módulo en desarrollo
+                                    </button>
+                                ) : (
+                                    <button className="btn-primary" style={{ width: 'auto' }} onClick={() => setMostrarPendientes(v => !v)}>
+                                        {mostrarPendientes ? 'Ocultar casos pendientes' : 'Ver casos pendientes'}
+                                    </button>
+                                )}
                             </>
                         )}
                     </div>
