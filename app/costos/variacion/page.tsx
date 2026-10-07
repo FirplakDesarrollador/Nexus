@@ -88,7 +88,7 @@ const PRIORIDAD_COLOR: Record<string, string> = { Alta: '#ef4444', Media: '#f59e
 
 // TEMPORAL — para demos: muestra el resumen de "Analizar" en cero y deshabilita la
 // bandeja de pendientes, sin tocar la lógica real. Para revertir, poner en false.
-const ANALISIS_DEMO_MODE = true
+const ANALISIS_DEMO_MODE = false
 const NALLELY_EMAIL = 'nallely.lopera@firplak.com'
 
 const fmt = (n: number | null | undefined) => n === null || n === undefined ? '—' : `$${Math.round(n).toLocaleString('es-CO')}`
