@@ -504,6 +504,22 @@ function VariacionCostosContent() {
 
     const pendientesBase = useMemo(() => rows.filter(r => r.estado === vistaBandeja), [rows, vistaBandeja])
 
+    // El resumen de "Analizar" mostraba los números congelados de la última corrida
+    // automática (variacion_analisis_runs) — se desactualizaban apenas alguien movía
+    // un caso a mano (ej. a "En análisis"). Las tarjetas de distribución/prioridad se
+    // calculan en vivo contra "rows"; total_recibidos y nuevos_pendientes sí describen
+    // la corrida en sí, esos se dejan como vienen del run.
+    const entradaMercanciaRows = useMemo(() => rows.filter(r => r.tipo_documento === 'Entrada de Mercacía'), [rows])
+    const resumenLive = useMemo(() => ({
+        finalizadoAuto: entradaMercanciaRows.filter(r => r.estado === 'Finalizado' && (r.origen_cierre ?? '').startsWith('auto_')).length,
+        noAplica: entradaMercanciaRows.filter(r => r.estado === 'No aplica').length,
+        pendiente: entradaMercanciaRows.filter(r => r.estado === 'Pendiente').length,
+        enAnalisis: entradaMercanciaRows.filter(r => r.estado === 'En análisis').length,
+        prioridadAlta: entradaMercanciaRows.filter(r => r.estado === 'Pendiente' && r.prioridad === 'Alta').length,
+        prioridadMedia: entradaMercanciaRows.filter(r => r.estado === 'Pendiente' && r.prioridad === 'Media').length,
+        prioridadBaja: entradaMercanciaRows.filter(r => r.estado === 'Pendiente' && r.prioridad === 'Baja').length,
+    }), [entradaMercanciaRows])
+
     const cambiarVistaBandeja = (v: 'Pendiente' | 'En análisis') => {
         setVistaBandeja(v)
         setPendFilters({ proveedor: [], item: [], prioridad: [] })
@@ -698,10 +714,10 @@ function VariacionCostosContent() {
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
                                     {[
                                         { icon: <PackageSearch size={16} style={{ opacity: 0.5 }} />, label: 'Registros recibidos', value: ANALISIS_DEMO_MODE ? 0 : ultimoRun.total_recibidos },
-                                        { icon: <CheckCircle2 size={16} color="#10b981" />, label: 'Finalizados automático', value: ANALISIS_DEMO_MODE ? 0 : ultimoRun.total_auto_finalizado, color: '#10b981' },
-                                        { icon: <AlertCircle size={16} style={{ opacity: 0.5 }} />, label: 'No aplica', value: ANALISIS_DEMO_MODE ? 0 : ultimoRun.total_no_aplica },
-                                        { icon: <AlertTriangle size={16} color="#ef4444" />, label: 'Pendientes', value: ANALISIS_DEMO_MODE ? 0 : ultimoRun.total_pendiente, color: '#ef4444' },
-                                        { icon: <Loader2 size={16} style={{ opacity: 0.5 }} />, label: 'En análisis', value: ANALISIS_DEMO_MODE ? 0 : ultimoRun.total_en_analisis },
+                                        { icon: <CheckCircle2 size={16} color="#10b981" />, label: 'Finalizados automático', value: ANALISIS_DEMO_MODE ? 0 : resumenLive.finalizadoAuto, color: '#10b981' },
+                                        { icon: <AlertCircle size={16} style={{ opacity: 0.5 }} />, label: 'No aplica', value: ANALISIS_DEMO_MODE ? 0 : resumenLive.noAplica },
+                                        { icon: <AlertTriangle size={16} color="#ef4444" />, label: 'Pendientes', value: ANALISIS_DEMO_MODE ? 0 : resumenLive.pendiente, color: '#ef4444' },
+                                        { icon: <Loader2 size={16} style={{ opacity: 0.5 }} />, label: 'En análisis', value: ANALISIS_DEMO_MODE ? 0 : resumenLive.enAnalisis },
                                         { icon: <AlertTriangle size={16} color="#f59e0b" />, label: 'Nuevos pendientes', value: ANALISIS_DEMO_MODE ? 0 : ultimoRun.total_nuevos_pendientes, color: '#f59e0b' },
                                     ].map((k, i) => (
                                         <div key={i} className="stat-card card">
@@ -716,9 +732,9 @@ function VariacionCostosContent() {
 
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
                                     {[
-                                        { label: 'Prioridad Alta', value: ANALISIS_DEMO_MODE ? 0 : ultimoRun.prioridad_alta, color: PRIORIDAD_COLOR.Alta },
-                                        { label: 'Prioridad Media', value: ANALISIS_DEMO_MODE ? 0 : ultimoRun.prioridad_media, color: PRIORIDAD_COLOR.Media },
-                                        { label: 'Prioridad Baja', value: ANALISIS_DEMO_MODE ? 0 : ultimoRun.prioridad_baja, color: PRIORIDAD_COLOR.Baja },
+                                        { label: 'Prioridad Alta', value: ANALISIS_DEMO_MODE ? 0 : resumenLive.prioridadAlta, color: PRIORIDAD_COLOR.Alta },
+                                        { label: 'Prioridad Media', value: ANALISIS_DEMO_MODE ? 0 : resumenLive.prioridadMedia, color: PRIORIDAD_COLOR.Media },
+                                        { label: 'Prioridad Baja', value: ANALISIS_DEMO_MODE ? 0 : resumenLive.prioridadBaja, color: PRIORIDAD_COLOR.Baja },
                                     ].map((k, i) => (
                                         <div key={i} className="stat-card card">
                                             <div style={{ flex: 1 }}>
