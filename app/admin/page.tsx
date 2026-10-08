@@ -11,6 +11,11 @@ import {
 } from 'lucide-react'
 import './admin.css'
 
+// Rechazada/Completada = caso cerrado: ya no se edita (ni estado, ni comentarios, ni
+// archivos) — solo se puede visualizar. "Completada" sigue permitiendo "Finalizar
+// Gestión" (es la acción de archivarlo, no una edición del caso en sí).
+const esCasoCerrado = (estado: string) => estado === 'Rechazada' || estado === 'Completada'
+
 export default function AdminDashboard() {
     const supabase = createClient()
     const [requests, setRequests] = useState<any[]>([])
@@ -664,19 +669,25 @@ export default function AdminDashboard() {
                                             </span>
                                         </td>
                                         <td>
-                                            <select
-                                                className="form-control"
-                                                style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
-                                                value={req.estado_actual}
-                                                onChange={(e) => handleUpdateStatus(req.id, e.target.value)}
-                                            >
-                                                <option value="Revisión">Revisión</option>
-                                                <option value="Aprobado">Aprobado</option>
-                                                <option value="En Cotización">En Cotización</option>
-                                                <option value="En Camino">En Camino</option>
-                                                <option value="Completada">Completada</option>
-                                                <option value="Rechazada">Rechazada</option>
-                                            </select>
+                                            {esCasoCerrado(req.estado_actual) ? (
+                                                <span className={`badge ${req.estado_actual === 'Rechazada' ? 'badge-rejected' : 'badge-approved'}`} style={{ fontSize: '0.72rem' }}>
+                                                    {req.estado_actual}
+                                                </span>
+                                            ) : (
+                                                <select
+                                                    className="form-control"
+                                                    style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                                                    value={req.estado_actual}
+                                                    onChange={(e) => handleUpdateStatus(req.id, e.target.value)}
+                                                >
+                                                    <option value="Revisión">Revisión</option>
+                                                    <option value="Aprobado">Aprobado</option>
+                                                    <option value="En Cotización">En Cotización</option>
+                                                    <option value="En Camino">En Camino</option>
+                                                    <option value="Completada">Completada</option>
+                                                    <option value="Rechazada">Rechazada</option>
+                                                </select>
+                                            )}
                                         </td>
                                         <td>
                                             <button
@@ -687,9 +698,9 @@ export default function AdminDashboard() {
                                                     fetchDocuments(req.id);
                                                     setNewComment('');
                                                 }}
-                                                style={{ background: 'hsl(var(--primary) / 0.1)', color: 'hsl(var(--primary))' }}
+                                                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: 'hsl(var(--primary) / 0.1)', color: 'hsl(var(--primary))' }}
                                             >
-                                                Gestionar
+                                                {esCasoCerrado(req.estado_actual) ? <><Eye size={13} /> Visualizar</> : 'Gestionar'}
                                             </button>
                                         </td>
                                     </tr>
@@ -847,23 +858,32 @@ export default function AdminDashboard() {
                             borderRadius: '1.5rem',
                             boxSizing: 'border-box'
                         }}>
-                            <h3 style={{ marginTop: 0, marginBottom: '1.5rem', fontSize: '1rem' }}>Acciones de Gestión</h3>
+                            <h3 style={{ marginTop: 0, marginBottom: '0.5rem', fontSize: '1rem' }}>Acciones de Gestión</h3>
+                            {esCasoCerrado(selectedRequest.estado_actual) && (
+                                <p style={{ margin: '0 0 1.5rem', fontSize: '0.8rem', color: 'hsl(var(--muted-foreground))', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                    <Eye size={14} /> Caso cerrado — modo solo lectura.
+                                </p>
+                            )}
 
                             <div className="form-group" style={{ marginBottom: '1.5rem' }}>
                                 <label>Cambiar Estado Actual</label>
-                                <select
-                                    className="form-control"
-                                    value={selectedRequest.estado_actual}
-                                    onChange={(e) => handleUpdateStatus(selectedRequest.id, e.target.value, selectedRequest.observacion_actual)}
-                                    disabled={isSaving}
-                                >
-                                    <option value="Revisión">Revisión</option>
-                                    <option value="Aprobado">Aprobado</option>
-                                    <option value="En Cotización">En Cotización</option>
-                                    <option value="En Camino">En Camino</option>
-                                    <option value="Completada">Completada</option>
-                                    <option value="Rechazada">Rechazada</option>
-                                </select>
+                                {esCasoCerrado(selectedRequest.estado_actual) ? (
+                                    <div className="form-control" style={{ background: 'hsl(var(--card))', opacity: 0.7 }}>{selectedRequest.estado_actual}</div>
+                                ) : (
+                                    <select
+                                        className="form-control"
+                                        value={selectedRequest.estado_actual}
+                                        onChange={(e) => handleUpdateStatus(selectedRequest.id, e.target.value, selectedRequest.observacion_actual)}
+                                        disabled={isSaving}
+                                    >
+                                        <option value="Revisión">Revisión</option>
+                                        <option value="Aprobado">Aprobado</option>
+                                        <option value="En Cotización">En Cotización</option>
+                                        <option value="En Camino">En Camino</option>
+                                        <option value="Completada">Completada</option>
+                                        <option value="Rechazada">Rechazada</option>
+                                    </select>
+                                )}
                             </div>
 
                             <div className="form-group" style={{ marginBottom: '1.5rem' }}>
@@ -888,11 +908,13 @@ export default function AdminDashboard() {
                                 <div className="attachments-section" style={{ marginBottom: '2rem' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                                         <label style={{ margin: 0 }}>Archivos y Cotizaciones</label>
-                                        <label className="action-btn" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0, fontSize: '0.8rem' }}>
-                                            <Paperclip size={14} />
-                                            {isUploading ? 'Subiendo...' : 'Adjuntar Archivo'}
-                                            <input type="file" style={{ display: 'none' }} onChange={handleFileUpload} disabled={isUploading} />
-                                        </label>
+                                        {!esCasoCerrado(selectedRequest.estado_actual) && (
+                                            <label className="action-btn" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0, fontSize: '0.8rem' }}>
+                                                <Paperclip size={14} />
+                                                {isUploading ? 'Subiendo...' : 'Adjuntar Archivo'}
+                                                <input type="file" style={{ display: 'none' }} onChange={handleFileUpload} disabled={isUploading} />
+                                            </label>
+                                        )}
                                     </div>
                                     
                                     <div className="files-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
@@ -914,9 +936,11 @@ export default function AdminDashboard() {
                                                         <button onClick={() => handleDownloadFile(file.path, file.filename)} style={{ padding: '0.25rem', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.7 }} title="Descargar">
                                                             <Download size={14} />
                                                         </button>
-                                                        <button onClick={() => handleDeleteFile(file.id, file.path)} style={{ padding: '0.25rem', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.7, color: '#ff4d4d' }} title="Eliminar">
-                                                            <Trash2 size={14} />
-                                                        </button>
+                                                        {!esCasoCerrado(selectedRequest.estado_actual) && (
+                                                            <button onClick={() => handleDeleteFile(file.id, file.path)} style={{ padding: '0.25rem', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.7, color: '#ff4d4d' }} title="Eliminar">
+                                                                <Trash2 size={14} />
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </div>
                                             ))
@@ -924,6 +948,7 @@ export default function AdminDashboard() {
                                     </div>
                                 </div>
 
+                                {!esCasoCerrado(selectedRequest.estado_actual) && (<>
                                 <label>Nuevo Comentario / Observación</label>
                                 <textarea
                                     className="form-control"
@@ -934,10 +959,10 @@ export default function AdminDashboard() {
                                 />
                                 <button
                                     className="action-btn"
-                                    style={{ 
-                                        marginTop: '1rem', 
-                                        width: 'auto', 
-                                        display: 'block', 
+                                    style={{
+                                        marginTop: '1rem',
+                                        width: 'auto',
+                                        display: 'block',
                                         margin: '1rem auto 0',
                                         background: 'hsl(var(--primary))',
                                         color: 'white',
@@ -950,6 +975,7 @@ export default function AdminDashboard() {
                                 >
                                     {isSaving ? 'Guardando...' : 'Insertar Comentario'}
                                 </button>
+                                </>)}
                             </div>
 
                             {selectedRequest.estado_actual === 'Completada' && (
