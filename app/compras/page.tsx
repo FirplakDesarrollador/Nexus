@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { PlusCircle, Clock, History, User, ArrowLeft } from 'lucide-react'
+import { PlusCircle, Clock, User, ArrowLeft } from 'lucide-react'
 import '../home/home.css'
 
 export default function ComprasMenuPage() {
@@ -63,16 +63,8 @@ export default function ComprasMenuPage() {
                         <div className="icon-wrapper">
                             <Clock size={32} />
                         </div>
-                        <h2>Estado de Compra</h2>
-                        <p>Consulta el progreso de tus solicitudes activas y revisa observaciones.</p>
-                    </Link>
-
-                    <Link href="/solicitudes/historial" className="nav-card card">
-                        <div className="icon-wrapper">
-                            <History size={32} />
-                        </div>
-                        <h2>Historial</h2>
-                        <p>Revisa solicitudes cerradas, completadas o rechazadas con sus detalles.</p>
+                        <h2>Mis Solicitudes</h2>
+                        <p>Consulta el progreso de tus solicitudes activas, o revisa tu historial de cerradas, completadas y rechazadas.</p>
                     </Link>
 
                     {profile?.rol === 'ADMIN' && (

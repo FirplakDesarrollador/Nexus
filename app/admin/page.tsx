@@ -11,12 +11,21 @@ import {
 } from 'lucide-react'
 import './admin.css'
 
+// Rechazada/Completada = caso cerrado: ya no se edita (ni estado, ni comentarios, ni
+// archivos) — solo se puede visualizar. "Completada" sigue permitiendo "Finalizar
+// Gestión" (es la acción de archivarlo, no una edición del caso en sí).
+const esCasoCerrado = (estado: string) => estado === 'Rechazada' || estado === 'Completada'
+
 export default function AdminDashboard() {
     const supabase = createClient()
     const [requests, setRequests] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [stats, setStats] = useState({ pending: 0, inProgress: 0, urgent: 0, readyToClose: 0 })
+    const [stats, setStats] = useState({ pending: 0, inProgress: 0, urgent: 0, readyToClose: 0, finalizadas: 0 })
+    const [finalizadasRequests, setFinalizadasRequests] = useState<any[]>([])
+    const [finalizadasLoaded, setFinalizadasLoaded] = useState(false)
+    const [loadingFinalizadas, setLoadingFinalizadas] = useState(false)
+    const [cierreInfo, setCierreInfo] = useState<any | null>(null)
     const [selectedRequest, setSelectedRequest] = useState<any | null>(null)
     const [isSaving, setIsSaving] = useState(false)
     const [filterType, setFilterType] = useState('all')
@@ -132,13 +141,19 @@ export default function AdminDashboard() {
 
             if (fetchError) throw fetchError
 
+            const { count: finalizadasCount } = await supabase.schema('nexus')
+                .from('solicitudes')
+                .select('id', { count: 'exact', head: true })
+                .not('closed_at', 'is', null)
+
             if (data) {
                 setRequests(data)
                 setStats({
                     pending: data.filter(r => r.estado_actual === 'Revisión').length,
                     inProgress: data.filter(r => r.estado_actual !== 'Revisión').length,
                     urgent: data.filter(r => r.prioridad === 'Urgente').length,
-                    readyToClose: data.filter(r => r.estado_actual === 'Aprobado').length
+                    readyToClose: data.filter(r => r.estado_actual === 'Aprobado').length,
+                    finalizadas: finalizadasCount ?? 0
                 })
             }
         } catch (err: any) {
@@ -147,6 +162,41 @@ export default function AdminDashboard() {
         } finally {
             setLoading(false)
         }
+    }
+
+    const fetchFinalizadas = async () => {
+        setLoadingFinalizadas(true)
+        try {
+            const { data, error: fetchError } = await supabase.schema('nexus')
+                .from('solicitudes')
+                .select(`
+                    *,
+                    solicitante:users!solicitante_id(nombre, area, email),
+                    centro_costos:centros_costos(nombre, codigo),
+                    cuenta_contable:cuentas_contables(nombre, codigo),
+                    responsable:users!responsable_id(nombre)
+                `)
+                .not('closed_at', 'is', null)
+                .order('closed_at', { ascending: false })
+
+            if (fetchError) throw fetchError
+            if (data) setFinalizadasRequests(data)
+            setFinalizadasLoaded(true)
+        } catch (err: any) {
+            console.error('Error fetching finalizadas:', err)
+            showToast('Error al cargar las solicitudes finalizadas', 'error')
+        } finally {
+            setLoadingFinalizadas(false)
+        }
+    }
+
+    const toggleFinalizadas = () => {
+        if (filterType === 'finalizadas') {
+            setFilterType('all')
+            return
+        }
+        setFilterType('finalizadas')
+        if (!finalizadasLoaded) fetchFinalizadas()
     }
 
     const fetchComments = async (requestId: string) => {
@@ -168,6 +218,15 @@ export default function AdminDashboard() {
             .eq('solicitud_id', requestId)
             .order('created_at', { ascending: false })
         if (data) setAttachedFiles(data)
+    }
+
+    const fetchCierreInfo = async (requestId: string) => {
+        const { data } = await supabase.schema('nexus')
+            .from('cierres_compra')
+            .select('*')
+            .eq('solicitud_id', requestId)
+            .maybeSingle()
+        setCierreInfo(data ?? null)
     }
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -344,6 +403,7 @@ export default function AdminDashboard() {
             showToast(`¡Gestión finalizada! Resultado: ${tipo_resultado}`)
             setShowCierreModal(false)
             setSelectedRequest(null)
+            setFinalizadasLoaded(false) // la lista de finalizadas quedó desactualizada
             await fetchData()
         } catch (err: any) {
             showToast('Error al finalizar: ' + err.message, 'error')
@@ -351,20 +411,20 @@ export default function AdminDashboard() {
         setIsSaving(false)
     }
 
-    const filteredRequests = requests.filter(req => {
+    const filteredRequests = (filterType === 'finalizadas' ? finalizadasRequests : requests).filter(req => {
         const query = searchTerm.toLowerCase();
-        const matchesSearch = 
+        const matchesSearch =
             req.titulo.toLowerCase().includes(query) ||
             req.ticket.toLowerCase().includes(query) ||
             (req.solicitante as any)?.nombre.toLowerCase().includes(query);
-        
+
         if (!matchesSearch) return false;
 
         if (filterType === 'pending') return req.estado_actual === 'Revisión';
         if (filterType === 'in-progress') return req.estado_actual !== 'Revisión';
         if (filterType === 'urgent') return req.prioridad === 'Urgente';
         if (filterType === 'ready-to-close') return req.estado_actual === 'Aprobado';
-        
+
         return true;
     });
 
@@ -550,13 +610,21 @@ export default function AdminDashboard() {
                     <span className="stat-value">{stats.inProgress}</span>
                     <CheckCircle size={20} style={{ opacity: 0.5 }} />
                 </div>
-                <div 
+                <div
                     className={`stat-card glass shadow-lg clickable ${filterType === 'urgent' ? 'active' : ''}`}
                     onClick={() => setFilterType(filterType === 'urgent' ? 'all' : 'urgent')}
                 >
                     <span className="stat-label">Urgentes</span>
                     <span className="stat-value" style={{ color: '#ff4d4d' }}>{stats.urgent}</span>
                     <AlertTriangle size={20} style={{ color: '#ff4d4d' }} />
+                </div>
+                <div
+                    className={`stat-card glass shadow-lg clickable ${filterType === 'finalizadas' ? 'active' : ''}`}
+                    onClick={toggleFinalizadas}
+                >
+                    <span className="stat-label">Finalizadas</span>
+                    <span className="stat-value" style={{ color: '#10b981' }}>{stats.finalizadas}</span>
+                    <CheckCircle2 size={20} style={{ color: '#10b981' }} />
                 </div>
 
             </div>
@@ -572,9 +640,10 @@ export default function AdminDashboard() {
                         {filterType !== 'all' && (
                             <span className="badge priority-urgente" style={{ textTransform: 'capitalize', fontSize: '0.7rem' }}>
                                 Filtrando por: {
-                                    filterType === 'pending' ? 'Pendientes' : 
-                                    filterType === 'in-progress' ? 'En Proceso' : 
-                                    filterType === 'urgent' ? 'Urgentes' : ''
+                                    filterType === 'pending' ? 'Pendientes' :
+                                    filterType === 'in-progress' ? 'En Proceso' :
+                                    filterType === 'urgent' ? 'Urgentes' :
+                                    filterType === 'finalizadas' ? 'Finalizadas' : ''
                                 }
                                 <X size={12} style={{ marginLeft: '0.5rem', cursor: 'pointer' }} onClick={() => setFilterType('all')} />
                             </span>
@@ -608,7 +677,7 @@ export default function AdminDashboard() {
                             </tr>
                         </thead>
                         <tbody>
-                            {loading ? (
+                            {loading || (filterType === 'finalizadas' && loadingFinalizadas) ? (
                                 <tr>
                                     <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', opacity: 0.5 }}>
                                         Cargando solicitudes...
@@ -664,19 +733,25 @@ export default function AdminDashboard() {
                                             </span>
                                         </td>
                                         <td>
-                                            <select
-                                                className="form-control"
-                                                style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
-                                                value={req.estado_actual}
-                                                onChange={(e) => handleUpdateStatus(req.id, e.target.value)}
-                                            >
-                                                <option value="Revisión">Revisión</option>
-                                                <option value="Aprobado">Aprobado</option>
-                                                <option value="En Cotización">En Cotización</option>
-                                                <option value="En Camino">En Camino</option>
-                                                <option value="Completada">Completada</option>
-                                                <option value="Rechazada">Rechazada</option>
-                                            </select>
+                                            {esCasoCerrado(req.estado_actual) ? (
+                                                <span className={`badge ${req.estado_actual === 'Rechazada' ? 'badge-rejected' : 'badge-approved'}`} style={{ fontSize: '0.72rem' }}>
+                                                    {req.estado_actual}
+                                                </span>
+                                            ) : (
+                                                <select
+                                                    className="form-control"
+                                                    style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                                                    value={req.estado_actual}
+                                                    onChange={(e) => handleUpdateStatus(req.id, e.target.value)}
+                                                >
+                                                    <option value="Revisión">Revisión</option>
+                                                    <option value="Aprobado">Aprobado</option>
+                                                    <option value="En Cotización">En Cotización</option>
+                                                    <option value="En Camino">En Camino</option>
+                                                    <option value="Completada">Completada</option>
+                                                    <option value="Rechazada">Rechazada</option>
+                                                </select>
+                                            )}
                                         </td>
                                         <td>
                                             <button
@@ -685,11 +760,12 @@ export default function AdminDashboard() {
                                                     setSelectedRequest(req);
                                                     fetchComments(req.id);
                                                     fetchDocuments(req.id);
+                                                    fetchCierreInfo(req.id);
                                                     setNewComment('');
                                                 }}
-                                                style={{ background: 'hsl(var(--primary) / 0.1)', color: 'hsl(var(--primary))' }}
+                                                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: 'hsl(var(--primary) / 0.1)', color: 'hsl(var(--primary))' }}
                                             >
-                                                Gestionar
+                                                {esCasoCerrado(req.estado_actual) ? <><Eye size={13} /> Visualizar</> : 'Gestionar'}
                                             </button>
                                         </td>
                                     </tr>
@@ -726,7 +802,7 @@ export default function AdminDashboard() {
                     }}>
                         <button
                             className="close-btn"
-                            onClick={() => setSelectedRequest(null)}
+                            onClick={() => { setSelectedRequest(null); setCierreInfo(null); }}
                             style={{ position: 'absolute', right: '1.5rem', top: '1.5rem', background: 'none', border: 'none', color: 'hsl(var(--foreground))', cursor: 'pointer', opacity: 0.5 }}
                         >
                             <X size={24} />
@@ -847,23 +923,47 @@ export default function AdminDashboard() {
                             borderRadius: '1.5rem',
                             boxSizing: 'border-box'
                         }}>
-                            <h3 style={{ marginTop: 0, marginBottom: '1.5rem', fontSize: '1rem' }}>Acciones de Gestión</h3>
+                            <h3 style={{ marginTop: 0, marginBottom: '0.5rem', fontSize: '1rem' }}>Acciones de Gestión</h3>
+                            {esCasoCerrado(selectedRequest.estado_actual) && (
+                                <p style={{ margin: '0 0 1.5rem', fontSize: '0.8rem', color: 'hsl(var(--muted-foreground))', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                    <Eye size={14} /> Caso cerrado — modo solo lectura.
+                                </p>
+                            )}
+
+                            {cierreInfo && (
+                                <div style={{ marginBottom: '1.5rem', padding: '1rem 1.25rem', background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: '0.75rem' }}>
+                                    <h4 style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                        <CheckCircle2 size={14} /> Datos del Cierre
+                                    </h4>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', fontSize: '0.8rem' }}>
+                                        <div><strong>Proveedor:</strong> {cierreInfo.proveedor}</div>
+                                        <div><strong>Valor total:</strong> ${Number(cierreInfo.valor_total_compra).toLocaleString('es-CO')}</div>
+                                        <div><strong>Cantidad:</strong> {cierreInfo.cantidad_total}</div>
+                                        <div><strong>Resultado:</strong> {cierreInfo.tipo_resultado}</div>
+                                        <div><strong>Cerrado el:</strong> {new Date(cierreInfo.created_at).toLocaleDateString()}</div>
+                                    </div>
+                                </div>
+                            )}
 
                             <div className="form-group" style={{ marginBottom: '1.5rem' }}>
                                 <label>Cambiar Estado Actual</label>
-                                <select
-                                    className="form-control"
-                                    value={selectedRequest.estado_actual}
-                                    onChange={(e) => handleUpdateStatus(selectedRequest.id, e.target.value, selectedRequest.observacion_actual)}
-                                    disabled={isSaving}
-                                >
-                                    <option value="Revisión">Revisión</option>
-                                    <option value="Aprobado">Aprobado</option>
-                                    <option value="En Cotización">En Cotización</option>
-                                    <option value="En Camino">En Camino</option>
-                                    <option value="Completada">Completada</option>
-                                    <option value="Rechazada">Rechazada</option>
-                                </select>
+                                {esCasoCerrado(selectedRequest.estado_actual) ? (
+                                    <div className="form-control" style={{ background: 'hsl(var(--card))', opacity: 0.7 }}>{selectedRequest.estado_actual}</div>
+                                ) : (
+                                    <select
+                                        className="form-control"
+                                        value={selectedRequest.estado_actual}
+                                        onChange={(e) => handleUpdateStatus(selectedRequest.id, e.target.value, selectedRequest.observacion_actual)}
+                                        disabled={isSaving}
+                                    >
+                                        <option value="Revisión">Revisión</option>
+                                        <option value="Aprobado">Aprobado</option>
+                                        <option value="En Cotización">En Cotización</option>
+                                        <option value="En Camino">En Camino</option>
+                                        <option value="Completada">Completada</option>
+                                        <option value="Rechazada">Rechazada</option>
+                                    </select>
+                                )}
                             </div>
 
                             <div className="form-group" style={{ marginBottom: '1.5rem' }}>
@@ -888,11 +988,13 @@ export default function AdminDashboard() {
                                 <div className="attachments-section" style={{ marginBottom: '2rem' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                                         <label style={{ margin: 0 }}>Archivos y Cotizaciones</label>
-                                        <label className="action-btn" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0, fontSize: '0.8rem' }}>
-                                            <Paperclip size={14} />
-                                            {isUploading ? 'Subiendo...' : 'Adjuntar Archivo'}
-                                            <input type="file" style={{ display: 'none' }} onChange={handleFileUpload} disabled={isUploading} />
-                                        </label>
+                                        {!esCasoCerrado(selectedRequest.estado_actual) && (
+                                            <label className="action-btn" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0, fontSize: '0.8rem' }}>
+                                                <Paperclip size={14} />
+                                                {isUploading ? 'Subiendo...' : 'Adjuntar Archivo'}
+                                                <input type="file" style={{ display: 'none' }} onChange={handleFileUpload} disabled={isUploading} />
+                                            </label>
+                                        )}
                                     </div>
                                     
                                     <div className="files-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
@@ -914,9 +1016,11 @@ export default function AdminDashboard() {
                                                         <button onClick={() => handleDownloadFile(file.path, file.filename)} style={{ padding: '0.25rem', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.7 }} title="Descargar">
                                                             <Download size={14} />
                                                         </button>
-                                                        <button onClick={() => handleDeleteFile(file.id, file.path)} style={{ padding: '0.25rem', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.7, color: '#ff4d4d' }} title="Eliminar">
-                                                            <Trash2 size={14} />
-                                                        </button>
+                                                        {!esCasoCerrado(selectedRequest.estado_actual) && (
+                                                            <button onClick={() => handleDeleteFile(file.id, file.path)} style={{ padding: '0.25rem', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.7, color: '#ff4d4d' }} title="Eliminar">
+                                                                <Trash2 size={14} />
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </div>
                                             ))
@@ -924,6 +1028,7 @@ export default function AdminDashboard() {
                                     </div>
                                 </div>
 
+                                {!esCasoCerrado(selectedRequest.estado_actual) && (<>
                                 <label>Nuevo Comentario / Observación</label>
                                 <textarea
                                     className="form-control"
@@ -934,10 +1039,10 @@ export default function AdminDashboard() {
                                 />
                                 <button
                                     className="action-btn"
-                                    style={{ 
-                                        marginTop: '1rem', 
-                                        width: 'auto', 
-                                        display: 'block', 
+                                    style={{
+                                        marginTop: '1rem',
+                                        width: 'auto',
+                                        display: 'block',
                                         margin: '1rem auto 0',
                                         background: 'hsl(var(--primary))',
                                         color: 'white',
@@ -950,9 +1055,10 @@ export default function AdminDashboard() {
                                 >
                                     {isSaving ? 'Guardando...' : 'Insertar Comentario'}
                                 </button>
+                                </>)}
                             </div>
 
-                            {selectedRequest.estado_actual === 'Completada' && (
+                            {selectedRequest.estado_actual === 'Completada' && !selectedRequest.closed_at && (
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginTop: '1rem' }}>
                                     <button
                                         className="btn-primary"

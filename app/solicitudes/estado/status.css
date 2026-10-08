@@ -60,3 +60,21 @@
     font-size: 0.875rem;
     color: hsl(var(--muted-foreground));
 }
+
+.action-btn {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    color: hsl(var(--foreground));
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    font-family: 'Outfit', sans-serif;
+    transition: all 0.2s;
+}
+
+.action-btn:hover {
+    border-color: hsl(var(--primary));
+    color: hsl(var(--primary));
+}
