@@ -357,6 +357,7 @@ function VariacionCostosContent() {
     const [mostrarPendientes, setMostrarPendientes] = useState(false)
     const [expandedPendienteId, setExpandedPendienteId] = useState<string | null>(null)
     const [confirmFinalizar, setConfirmFinalizar] = useState<VariacionRow | null>(null)
+    const [vistaBandeja, setVistaBandeja] = useState<'Pendiente' | 'En análisis'>('Pendiente')
     const [msStatus, setMsStatus] = useState<MsStatus | null>(null)
     const [msMsg, setMsMsg] = useState<string | null>(null)
     const [checkingCorreos, setCheckingCorreos] = useState(false)
@@ -501,7 +502,13 @@ function VariacionCostosContent() {
 
     const [pendFilters, setPendFilters] = useState<{ proveedor: string[]; item: string[]; prioridad: string[] }>({ proveedor: [], item: [], prioridad: [] })
 
-    const pendientesBase = useMemo(() => rows.filter(r => r.estado === 'Pendiente'), [rows])
+    const pendientesBase = useMemo(() => rows.filter(r => r.estado === vistaBandeja), [rows, vistaBandeja])
+
+    const cambiarVistaBandeja = (v: 'Pendiente' | 'En análisis') => {
+        setVistaBandeja(v)
+        setPendFilters({ proveedor: [], item: [], prioridad: [] })
+        setExpandedPendienteId(null)
+    }
 
     const aplicarFiltrosPendientes = (base: VariacionRow[], filtros: typeof pendFilters, excluir?: keyof typeof pendFilters) => {
         return base.filter(r => {
@@ -739,11 +746,27 @@ function VariacionCostosContent() {
                         <div style={sectionStyle}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.5rem' }}>
                                 <h2 style={{ margin: 0, fontSize: '1rem' }}>
-                                    Casos Pendientes ({pendientesOrdenados.length.toLocaleString('es-CO')} de {pendientesBase.length.toLocaleString('es-CO')}) — ordenados por prioridad
+                                    Casos {vistaBandeja === 'Pendiente' ? 'Pendientes' : 'En Análisis'} ({pendientesOrdenados.length.toLocaleString('es-CO')} de {pendientesBase.length.toLocaleString('es-CO')}) — ordenados por prioridad
                                 </h2>
-                                {(pendFilters.proveedor.length > 0 || pendFilters.item.length > 0 || pendFilters.prioridad.length > 0) && (
-                                    <button className="action-btn" style={{ fontSize: '0.78rem' }} onClick={() => setPendFilters({ proveedor: [], item: [], prioridad: [] })}>Limpiar filtros</button>
-                                )}
+                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                    <button
+                                        className="action-btn"
+                                        style={{ fontSize: '0.78rem', ...(vistaBandeja === 'Pendiente' ? { background: 'hsl(var(--primary))', color: '#f5f1ea', borderColor: 'hsl(var(--primary))' } : {}) }}
+                                        onClick={() => cambiarVistaBandeja('Pendiente')}
+                                    >
+                                        Pendientes
+                                    </button>
+                                    <button
+                                        className="action-btn"
+                                        style={{ fontSize: '0.78rem', ...(vistaBandeja === 'En análisis' ? { background: 'hsl(var(--primary))', color: '#f5f1ea', borderColor: 'hsl(var(--primary))' } : {}) }}
+                                        onClick={() => cambiarVistaBandeja('En análisis')}
+                                    >
+                                        En análisis
+                                    </button>
+                                    {(pendFilters.proveedor.length > 0 || pendFilters.item.length > 0 || pendFilters.prioridad.length > 0) && (
+                                        <button className="action-btn" style={{ fontSize: '0.78rem' }} onClick={() => setPendFilters({ proveedor: [], item: [], prioridad: [] })}>Limpiar filtros</button>
+                                    )}
+                                </div>
                             </div>
                             <p style={{ margin: '0 0 1.25rem', fontSize: '0.78rem', color: 'hsl(var(--muted-foreground))' }}>
                                 Haz clic en una fila para ver por qué llegó aquí y el resto del detalle. Los filtros se cruzan entre sí.
@@ -815,14 +838,14 @@ function VariacionCostosContent() {
                                                                 onChange={e => {
                                                                     const nuevoEstado = e.target.value
                                                                     if (nuevoEstado === 'Finalizado') {
-                                                                        e.target.value = r.estado || '' // se queda en "Pendiente" mientras se confirma
+                                                                        e.target.value = r.estado || '' // se queda igual mientras se confirma
                                                                         setConfirmFinalizar(r)
                                                                         return
                                                                     }
                                                                     updateRow(r.id, 'estado', nuevoEstado)
                                                                 }}
                                                             >
-                                                                {ESTADOS_EDITABLES.filter(e => e !== 'Pendiente').map(e => <option key={e} value={e}>{e}</option>)}
+                                                                {ESTADOS_EDITABLES.filter(e => e !== r.estado).map(e => <option key={e} value={e}>{e}</option>)}
                                                             </select>
                                                         </td>
                                                         <td>
