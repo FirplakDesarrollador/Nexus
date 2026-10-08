@@ -365,7 +365,6 @@ function VariacionCostosContent() {
     const [archivoFilters, setArchivoFilters] = useState<Record<string, string[]>>({})
     const [archivoSortTotalLinea, setArchivoSortTotalLinea] = useState<'asc' | 'desc' | null>(null)
 
-    const [vista, setVista] = useState<'activos' | 'todo'>('activos')
     const [fProveedor, setFProveedor] = useState('')
     const [fItem, setFItem] = useState('')
     const [fEstado, setFEstado] = useState('')
@@ -413,7 +412,7 @@ function VariacionCostosContent() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isAdmin])
 
-    useEffect(() => { setPage(1) }, [vista, fProveedor, fEstado, fItem, fDesde, fHasta])
+    useEffect(() => { setPage(1) }, [fProveedor, fEstado, fItem, fDesde, fHasta])
     useEffect(() => { setArchivoPage(1) }, [archivoFilters, archivoSortTotalLinea])
 
     // Mensajes de vuelta del flujo de conexión con Microsoft (?msConnected=... / ?msError=...)
@@ -484,12 +483,10 @@ function VariacionCostosContent() {
 
     const filtered = useMemo(() => {
         return filteredBase.filter(r => {
-            // "Activos" = todo lo que no esté cerrado (Finalizado / No aplica).
-            if (vista === 'activos' && (r.estado === 'Finalizado' || r.estado === 'No aplica')) return false
             if (fEstado === SIN_ESTADO ? !!r.estado : (fEstado && r.estado !== fEstado)) return false
             return true
         })
-    }, [filteredBase, vista, fEstado])
+    }, [filteredBase, fEstado])
 
     // Bandeja de análisis humano: todos los Pendiente, sin los filtros del histórico —
     // es una cola aparte, ordenada por prioridad y luego por impacto acumulado. Los
@@ -906,24 +903,6 @@ function VariacionCostosContent() {
 
             {tab === 'historico' && (
                 <>
-                    {/* ── Toggle de vista ── */}
-                    <div style={{ display: 'inline-flex', gap: '0.5rem', marginBottom: '1.25rem' }}>
-                        <button
-                            className="action-btn"
-                            onClick={() => setVista('activos')}
-                            style={vista === 'activos' ? { background: 'hsl(var(--primary))', color: '#f5f1ea', borderColor: 'hsl(var(--primary))' } : {}}
-                        >
-                            Activos (no cerrados)
-                        </button>
-                        <button
-                            className="action-btn"
-                            onClick={() => setVista('todo')}
-                            style={vista === 'todo' ? { background: 'hsl(var(--primary))', color: '#f5f1ea', borderColor: 'hsl(var(--primary))' } : {}}
-                        >
-                            Todo el histórico
-                        </button>
-                    </div>
-
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
                         {[
                             { icon: <PackageSearch size={16} style={{ opacity: 0.5 }} />, label: 'Registros (vista actual)', value: totalRegistros.toLocaleString('es-CO') },
