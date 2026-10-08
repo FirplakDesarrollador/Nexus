@@ -21,7 +21,11 @@ export default function AdminDashboard() {
     const [requests, setRequests] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [stats, setStats] = useState({ pending: 0, inProgress: 0, urgent: 0, readyToClose: 0 })
+    const [stats, setStats] = useState({ pending: 0, inProgress: 0, urgent: 0, readyToClose: 0, finalizadas: 0 })
+    const [finalizadasRequests, setFinalizadasRequests] = useState<any[]>([])
+    const [finalizadasLoaded, setFinalizadasLoaded] = useState(false)
+    const [loadingFinalizadas, setLoadingFinalizadas] = useState(false)
+    const [cierreInfo, setCierreInfo] = useState<any | null>(null)
     const [selectedRequest, setSelectedRequest] = useState<any | null>(null)
     const [isSaving, setIsSaving] = useState(false)
     const [filterType, setFilterType] = useState('all')
@@ -137,13 +141,19 @@ export default function AdminDashboard() {
 
             if (fetchError) throw fetchError
 
+            const { count: finalizadasCount } = await supabase.schema('nexus')
+                .from('solicitudes')
+                .select('id', { count: 'exact', head: true })
+                .not('closed_at', 'is', null)
+
             if (data) {
                 setRequests(data)
                 setStats({
                     pending: data.filter(r => r.estado_actual === 'Revisión').length,
                     inProgress: data.filter(r => r.estado_actual !== 'Revisión').length,
                     urgent: data.filter(r => r.prioridad === 'Urgente').length,
-                    readyToClose: data.filter(r => r.estado_actual === 'Aprobado').length
+                    readyToClose: data.filter(r => r.estado_actual === 'Aprobado').length,
+                    finalizadas: finalizadasCount ?? 0
                 })
             }
         } catch (err: any) {
@@ -152,6 +162,41 @@ export default function AdminDashboard() {
         } finally {
             setLoading(false)
         }
+    }
+
+    const fetchFinalizadas = async () => {
+        setLoadingFinalizadas(true)
+        try {
+            const { data, error: fetchError } = await supabase.schema('nexus')
+                .from('solicitudes')
+                .select(`
+                    *,
+                    solicitante:users!solicitante_id(nombre, area, email),
+                    centro_costos:centros_costos(nombre, codigo),
+                    cuenta_contable:cuentas_contables(nombre, codigo),
+                    responsable:users!responsable_id(nombre)
+                `)
+                .not('closed_at', 'is', null)
+                .order('closed_at', { ascending: false })
+
+            if (fetchError) throw fetchError
+            if (data) setFinalizadasRequests(data)
+            setFinalizadasLoaded(true)
+        } catch (err: any) {
+            console.error('Error fetching finalizadas:', err)
+            showToast('Error al cargar las solicitudes finalizadas', 'error')
+        } finally {
+            setLoadingFinalizadas(false)
+        }
+    }
+
+    const toggleFinalizadas = () => {
+        if (filterType === 'finalizadas') {
+            setFilterType('all')
+            return
+        }
+        setFilterType('finalizadas')
+        if (!finalizadasLoaded) fetchFinalizadas()
     }
 
     const fetchComments = async (requestId: string) => {
@@ -173,6 +218,15 @@ export default function AdminDashboard() {
             .eq('solicitud_id', requestId)
             .order('created_at', { ascending: false })
         if (data) setAttachedFiles(data)
+    }
+
+    const fetchCierreInfo = async (requestId: string) => {
+        const { data } = await supabase.schema('nexus')
+            .from('cierres_compra')
+            .select('*')
+            .eq('solicitud_id', requestId)
+            .maybeSingle()
+        setCierreInfo(data ?? null)
     }
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -349,6 +403,7 @@ export default function AdminDashboard() {
             showToast(`¡Gestión finalizada! Resultado: ${tipo_resultado}`)
             setShowCierreModal(false)
             setSelectedRequest(null)
+            setFinalizadasLoaded(false) // la lista de finalizadas quedó desactualizada
             await fetchData()
         } catch (err: any) {
             showToast('Error al finalizar: ' + err.message, 'error')
@@ -356,20 +411,20 @@ export default function AdminDashboard() {
         setIsSaving(false)
     }
 
-    const filteredRequests = requests.filter(req => {
+    const filteredRequests = (filterType === 'finalizadas' ? finalizadasRequests : requests).filter(req => {
         const query = searchTerm.toLowerCase();
-        const matchesSearch = 
+        const matchesSearch =
             req.titulo.toLowerCase().includes(query) ||
             req.ticket.toLowerCase().includes(query) ||
             (req.solicitante as any)?.nombre.toLowerCase().includes(query);
-        
+
         if (!matchesSearch) return false;
 
         if (filterType === 'pending') return req.estado_actual === 'Revisión';
         if (filterType === 'in-progress') return req.estado_actual !== 'Revisión';
         if (filterType === 'urgent') return req.prioridad === 'Urgente';
         if (filterType === 'ready-to-close') return req.estado_actual === 'Aprobado';
-        
+
         return true;
     });
 
@@ -555,13 +610,21 @@ export default function AdminDashboard() {
                     <span className="stat-value">{stats.inProgress}</span>
                     <CheckCircle size={20} style={{ opacity: 0.5 }} />
                 </div>
-                <div 
+                <div
                     className={`stat-card glass shadow-lg clickable ${filterType === 'urgent' ? 'active' : ''}`}
                     onClick={() => setFilterType(filterType === 'urgent' ? 'all' : 'urgent')}
                 >
                     <span className="stat-label">Urgentes</span>
                     <span className="stat-value" style={{ color: '#ff4d4d' }}>{stats.urgent}</span>
                     <AlertTriangle size={20} style={{ color: '#ff4d4d' }} />
+                </div>
+                <div
+                    className={`stat-card glass shadow-lg clickable ${filterType === 'finalizadas' ? 'active' : ''}`}
+                    onClick={toggleFinalizadas}
+                >
+                    <span className="stat-label">Finalizadas</span>
+                    <span className="stat-value" style={{ color: '#10b981' }}>{stats.finalizadas}</span>
+                    <CheckCircle2 size={20} style={{ color: '#10b981' }} />
                 </div>
 
             </div>
@@ -577,9 +640,10 @@ export default function AdminDashboard() {
                         {filterType !== 'all' && (
                             <span className="badge priority-urgente" style={{ textTransform: 'capitalize', fontSize: '0.7rem' }}>
                                 Filtrando por: {
-                                    filterType === 'pending' ? 'Pendientes' : 
-                                    filterType === 'in-progress' ? 'En Proceso' : 
-                                    filterType === 'urgent' ? 'Urgentes' : ''
+                                    filterType === 'pending' ? 'Pendientes' :
+                                    filterType === 'in-progress' ? 'En Proceso' :
+                                    filterType === 'urgent' ? 'Urgentes' :
+                                    filterType === 'finalizadas' ? 'Finalizadas' : ''
                                 }
                                 <X size={12} style={{ marginLeft: '0.5rem', cursor: 'pointer' }} onClick={() => setFilterType('all')} />
                             </span>
@@ -613,7 +677,7 @@ export default function AdminDashboard() {
                             </tr>
                         </thead>
                         <tbody>
-                            {loading ? (
+                            {loading || (filterType === 'finalizadas' && loadingFinalizadas) ? (
                                 <tr>
                                     <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', opacity: 0.5 }}>
                                         Cargando solicitudes...
@@ -696,6 +760,7 @@ export default function AdminDashboard() {
                                                     setSelectedRequest(req);
                                                     fetchComments(req.id);
                                                     fetchDocuments(req.id);
+                                                    fetchCierreInfo(req.id);
                                                     setNewComment('');
                                                 }}
                                                 style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: 'hsl(var(--primary) / 0.1)', color: 'hsl(var(--primary))' }}
@@ -737,7 +802,7 @@ export default function AdminDashboard() {
                     }}>
                         <button
                             className="close-btn"
-                            onClick={() => setSelectedRequest(null)}
+                            onClick={() => { setSelectedRequest(null); setCierreInfo(null); }}
                             style={{ position: 'absolute', right: '1.5rem', top: '1.5rem', background: 'none', border: 'none', color: 'hsl(var(--foreground))', cursor: 'pointer', opacity: 0.5 }}
                         >
                             <X size={24} />
@@ -865,6 +930,21 @@ export default function AdminDashboard() {
                                 </p>
                             )}
 
+                            {cierreInfo && (
+                                <div style={{ marginBottom: '1.5rem', padding: '1rem 1.25rem', background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: '0.75rem' }}>
+                                    <h4 style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                        <CheckCircle2 size={14} /> Datos del Cierre
+                                    </h4>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', fontSize: '0.8rem' }}>
+                                        <div><strong>Proveedor:</strong> {cierreInfo.proveedor}</div>
+                                        <div><strong>Valor total:</strong> ${Number(cierreInfo.valor_total_compra).toLocaleString('es-CO')}</div>
+                                        <div><strong>Cantidad:</strong> {cierreInfo.cantidad_total}</div>
+                                        <div><strong>Resultado:</strong> {cierreInfo.tipo_resultado}</div>
+                                        <div><strong>Cerrado el:</strong> {new Date(cierreInfo.created_at).toLocaleDateString()}</div>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="form-group" style={{ marginBottom: '1.5rem' }}>
                                 <label>Cambiar Estado Actual</label>
                                 {esCasoCerrado(selectedRequest.estado_actual) ? (
@@ -978,7 +1058,7 @@ export default function AdminDashboard() {
                                 </>)}
                             </div>
 
-                            {selectedRequest.estado_actual === 'Completada' && (
+                            {selectedRequest.estado_actual === 'Completada' && !selectedRequest.closed_at && (
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginTop: '1rem' }}>
                                     <button
                                         className="btn-primary"

@@ -15,6 +15,17 @@ export default function RequestDetailPage() {
     const [attachedFiles, setAttachedFiles] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [isAdmin, setIsAdmin] = useState(false)
+
+    useEffect(() => {
+        const fetchRole = async () => {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) return
+            const { data: profile } = await supabase.schema('nexus').from('users').select('rol').eq('id', user.id).maybeSingle()
+            setIsAdmin(profile?.rol === 'ADMIN')
+        }
+        fetchRole()
+    }, [supabase])
 
     useEffect(() => {
         const fetchRequest = async () => {
@@ -177,15 +188,19 @@ export default function RequestDetailPage() {
                     </h3>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                        <div>
-                            <label style={{ display: 'block', fontSize: '0.75rem', opacity: 0.5, textTransform: 'uppercase', marginBottom: '0.25rem' }}>Centro de Costos</label>
-                            <div style={{ fontWeight: 500 }}>[{request.centro_costos?.codigo}] {request.centro_costos?.nombre}</div>
-                        </div>
+                        {isAdmin && (
+                            <>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', opacity: 0.5, textTransform: 'uppercase', marginBottom: '0.25rem' }}>Centro de Costos</label>
+                                    <div style={{ fontWeight: 500 }}>[{request.centro_costos?.codigo}] {request.centro_costos?.nombre}</div>
+                                </div>
 
-                        <div>
-                            <label style={{ display: 'block', fontSize: '0.75rem', opacity: 0.5, textTransform: 'uppercase', marginBottom: '0.25rem' }}>Cuenta Contable</label>
-                            <div style={{ fontWeight: 500 }}>{request.cuenta_contable?.codigo} - {request.cuenta_contable?.nombre}</div>
-                        </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', opacity: 0.5, textTransform: 'uppercase', marginBottom: '0.25rem' }}>Cuenta Contable</label>
+                                    <div style={{ fontWeight: 500 }}>{request.cuenta_contable?.codigo} - {request.cuenta_contable?.nombre}</div>
+                                </div>
+                            </>
+                        )}
 
                         <div>
                             <label style={{ display: 'block', fontSize: '0.75rem', opacity: 0.5, textTransform: 'uppercase', marginBottom: '0.25rem' }}>Responsable Compra</label>
