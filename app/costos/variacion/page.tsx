@@ -822,7 +822,7 @@ function VariacionCostosContent() {
                                                                     updateRow(r.id, 'estado', nuevoEstado)
                                                                 }}
                                                             >
-                                                                {ESTADOS_EDITABLES.map(e => <option key={e} value={e}>{e}</option>)}
+                                                                {ESTADOS_EDITABLES.filter(e => e !== 'Pendiente').map(e => <option key={e} value={e}>{e}</option>)}
                                                             </select>
                                                         </td>
                                                         <td>
