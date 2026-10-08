@@ -356,7 +356,7 @@ function VariacionCostosContent() {
     const [ultimoRun, setUltimoRun] = useState<AnalisisRun | null>(null)
     const [mostrarPendientes, setMostrarPendientes] = useState(false)
     const [expandedPendienteId, setExpandedPendienteId] = useState<string | null>(null)
-    const [confirmFinalizar, setConfirmFinalizar] = useState<VariacionRow | null>(null)
+    const [confirmCambioEstado, setConfirmCambioEstado] = useState<{ row: VariacionRow; nuevoEstado: string } | null>(null)
     const [vistaBandeja, setVistaBandeja] = useState<'Pendiente' | 'En análisis'>('Pendiente')
     const [msStatus, setMsStatus] = useState<MsStatus | null>(null)
     const [msMsg, setMsMsg] = useState<string | null>(null)
@@ -853,12 +853,8 @@ function VariacionCostosContent() {
                                                                 value={r.estado || ''}
                                                                 onChange={e => {
                                                                     const nuevoEstado = e.target.value
-                                                                    if (nuevoEstado === 'Finalizado') {
-                                                                        e.target.value = r.estado || '' // se queda igual mientras se confirma
-                                                                        setConfirmFinalizar(r)
-                                                                        return
-                                                                    }
-                                                                    updateRow(r.id, 'estado', nuevoEstado)
+                                                                    e.target.value = r.estado || '' // se queda igual mientras se confirma
+                                                                    setConfirmCambioEstado({ row: r, nuevoEstado })
                                                                 }}
                                                             >
                                                                 {ESTADOS_EDITABLES.filter(e => e !== r.estado).map(e => <option key={e} value={e}>{e}</option>)}
@@ -1327,7 +1323,7 @@ function VariacionCostosContent() {
                 </>
             )}
 
-            {confirmFinalizar && createPortal(
+            {confirmCambioEstado && createPortal(
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', zIndex: 9999, padding: '2rem' }}>
                     <div className="animate-scale-in" style={{
                         background: 'hsl(var(--card))',
@@ -1349,23 +1345,28 @@ function VariacionCostosContent() {
                         }}>
                             <CheckCircle2 size={28} />
                         </div>
-                        <h2 style={{ fontSize: '1.15rem', margin: 0, color: 'hsl(var(--foreground))' }}>¿Finalizar este análisis?</h2>
+                        <h2 style={{ fontSize: '1.15rem', margin: 0, color: 'hsl(var(--foreground))' }}>
+                            {confirmCambioEstado.nuevoEstado === 'Finalizado' ? '¿Finalizar este análisis?' : `¿Cambiar el estado a "${confirmCambioEstado.nuevoEstado}"?`}
+                        </h2>
                         <p style={{ opacity: 0.7, fontSize: '0.88rem', margin: 0, lineHeight: 1.5, color: 'hsl(var(--foreground))' }}>
-                            <strong>{confirmFinalizar.descripcion_item || confirmFinalizar.cod_item}</strong> ({confirmFinalizar.descripcion_proveedor || confirmFinalizar.cod_proveedor}) se cerrará y saldrá de la bandeja de pendientes.
+                            <strong>{confirmCambioEstado.row.descripcion_item || confirmCambioEstado.row.cod_item}</strong> ({confirmCambioEstado.row.descripcion_proveedor || confirmCambioEstado.row.cod_proveedor}){' '}
+                            {confirmCambioEstado.nuevoEstado === 'Finalizado'
+                                ? 'se cerrará y saldrá de la bandeja de pendientes.'
+                                : `pasará a estado "${confirmCambioEstado.nuevoEstado}".`}
                         </p>
                         <div style={{ display: 'flex', gap: '1rem', width: '100%', marginTop: '0.5rem' }}>
-                            <button className="action-btn" style={{ flex: 1 }} onClick={() => setConfirmFinalizar(null)}>
+                            <button className="action-btn" style={{ flex: 1 }} onClick={() => setConfirmCambioEstado(null)}>
                                 Cancelar
                             </button>
                             <button
                                 className="action-btn"
                                 style={{ flex: 1, background: 'hsl(var(--primary))', color: '#f5f1ea', border: 'none', fontWeight: 600 }}
                                 onClick={() => {
-                                    updateRow(confirmFinalizar.id, 'estado', 'Finalizado')
-                                    setConfirmFinalizar(null)
+                                    updateRow(confirmCambioEstado.row.id, 'estado', confirmCambioEstado.nuevoEstado)
+                                    setConfirmCambioEstado(null)
                                 }}
                             >
-                                Sí, finalizar
+                                {confirmCambioEstado.nuevoEstado === 'Finalizado' ? 'Sí, finalizar' : `Sí, cambiar a ${confirmCambioEstado.nuevoEstado}`}
                             </button>
                         </div>
                     </div>
