@@ -517,14 +517,18 @@ function VariacionCostosContent() {
 
     const [pendFilters, setPendFilters] = useState<{ proveedor: string[]; item: string[]; prioridad: string[] }>({ proveedor: [], item: [], prioridad: [] })
 
-    const pendientesBase = useMemo(() => rows.filter(r => r.estado === vistaBandeja), [rows, vistaBandeja])
+    // El motor solo clasifica/analiza "Entrada de Mercacía" — Orden de Compra y
+    // Precios de Entrega nunca deberían llegar a Pendiente/En análisis, pero se
+    // filtran igual aquí para que la bandeja y el resumen de arriba jamás puedan
+    // mostrar números distintos (antes la bandeja no excluía por tipo_documento).
+    const entradaMercanciaRows = useMemo(() => rows.filter(r => r.tipo_documento === 'Entrada de Mercacía'), [rows])
+    const pendientesBase = useMemo(() => entradaMercanciaRows.filter(r => r.estado === vistaBandeja), [entradaMercanciaRows, vistaBandeja])
 
     // El resumen de "Analizar" mostraba los números congelados de la última corrida
     // automática (variacion_analisis_runs) — se desactualizaban apenas alguien movía
     // un caso a mano (ej. a "En análisis"). Las tarjetas de distribución/prioridad se
     // calculan en vivo contra "rows"; total_recibidos y nuevos_pendientes sí describen
     // la corrida en sí, esos se dejan como vienen del run.
-    const entradaMercanciaRows = useMemo(() => rows.filter(r => r.tipo_documento === 'Entrada de Mercacía'), [rows])
     const resumenLive = useMemo(() => ({
         finalizadoAuto: entradaMercanciaRows.filter(r => r.estado === 'Finalizado' && (r.origen_cierre ?? '').startsWith('auto_')).length,
         noAplica: entradaMercanciaRows.filter(r => r.estado === 'No aplica').length,
