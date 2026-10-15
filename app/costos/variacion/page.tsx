@@ -8,7 +8,7 @@ import Link from 'next/link'
 import {
     ArrowLeft, TrendingUp, TrendingDown, RefreshCw,
     PackageSearch, AlertCircle, AlertTriangle, Loader2, ChevronDown, ChevronUp,
-    Search, X, Mail, CheckCircle2, Link2
+    Search, X, Mail, CheckCircle2, Link2, Info
 } from 'lucide-react'
 import '../../home/home.css'
 import '../../admin/admin.css'
@@ -234,17 +234,23 @@ function ItemSearchSelect({ options, value, onChange, placeholder }: {
 // "Positivos"/"Negativos" (en vez de tener que marcar valor por valor).
 interface ColFilterOption { display: string; raw: number | string | null }
 
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+
 // Filtro por columna de la tabla "Visualizar Archivo", al estilo "segmentación de datos"
 // de Excel: lista de valores existentes en esa columna, con checkboxes para elegir
 // varios a la vez, buscador para listas largas, y atajos por signo para columnas numéricas.
-function ColumnFilterSelect({ options, value, onChange }: {
+// Para columnas de fecha (isDate) navega Año → Mes → Día en vez de una lista plana.
+function ColumnFilterSelect({ options, value, onChange, isDate }: {
     options: ColFilterOption[]
     value: string[]
     onChange: (val: string[]) => void
+    isDate?: boolean
 }) {
     const [isOpen, setIsOpen] = useState(false)
     const [searchTerm, setSearchTerm] = useState('')
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+    const [drillYear, setDrillYear] = useState<string | null>(null)
+    const [drillMonth, setDrillMonth] = useState<string | null>(null)
     const containerRef = useRef<HTMLDivElement>(null)
 
     // "options" ya viene ordenado ascendente (numérico/cronológico o alfabético según
@@ -254,6 +260,22 @@ function ColumnFilterSelect({ options, value, onChange }: {
     const numericOptions = options.filter((o): o is { display: string; raw: number } => typeof o.raw === 'number')
     const hasPositivos = numericOptions.some(o => o.raw > 0)
     const hasNegativos = numericOptions.some(o => o.raw < 0)
+
+    // Año -> Mes -> días de ese mes, a partir del raw ISO "AAAA-MM-DD".
+    const dateTree = useMemo(() => {
+        if (!isDate) return null
+        const tree = new Map<string, Map<string, ColFilterOption[]>>()
+        for (const o of options) {
+            if (typeof o.raw !== 'string' || !o.raw) continue
+            const [y, m] = o.raw.split('-')
+            if (!y || !m) continue
+            if (!tree.has(y)) tree.set(y, new Map())
+            const meses = tree.get(y)!
+            if (!meses.has(m)) meses.set(m, [])
+            meses.get(m)!.push(o)
+        }
+        return tree
+    }, [options, isDate])
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -267,15 +289,88 @@ function ColumnFilterSelect({ options, value, onChange }: {
         onChange(value.includes(opt) ? value.filter(v => v !== opt) : [...value, opt])
     }
 
+    const toggleGroup = (displays: string[]) => {
+        const todosMarcados = displays.every(d => value.includes(d))
+        onChange(todosMarcados ? value.filter(v => !displays.includes(v)) : Array.from(new Set([...value, ...displays])))
+    }
+
     const selectOnlySign = (sign: 'pos' | 'neg') => {
         onChange(numericOptions.filter(o => sign === 'pos' ? o.raw > 0 : o.raw < 0).map(o => o.display))
     }
 
+    const abrir = () => {
+        if (!isOpen) { setDrillYear(null); setDrillMonth(null) }
+        setIsOpen(!isOpen)
+    }
+
     const label = value.length === 0 ? 'Filtrar...' : value.length === 1 ? value[0] : `${value.length} seleccionados`
+
+    // Vista jerárquica Año → Mes → Día (solo cuando no se está buscando por texto).
+    const renderDrillDown = () => {
+        if (!dateTree) return null
+        const años = Array.from(dateTree.keys())
+        const añosOrdenados = sortDir === 'desc' ? [...años].reverse() : años
+
+        if (drillYear && drillMonth) {
+            const dias = dateTree.get(drillYear)?.get(drillMonth) ?? []
+            const diasOrdenados = sortDir === 'desc' ? [...dias].reverse() : dias
+            return (
+                <>
+                    <button type="button" className="col-filter-breadcrumb" onClick={() => setDrillMonth(null)}>
+                        ‹ {MESES[parseInt(drillMonth, 10) - 1]} {drillYear}
+                    </button>
+                    {diasOrdenados.map(o => (
+                        <label key={o.display} className={`col-filter-option ${value.includes(o.display) ? 'selected' : ''}`}>
+                            <input type="checkbox" checked={value.includes(o.display)} onChange={() => toggle(o.display)} />
+                            <span>{o.display}</span>
+                        </label>
+                    ))}
+                </>
+            )
+        }
+
+        if (drillYear) {
+            const meses = Array.from(dateTree.get(drillYear)?.keys() ?? [])
+            const mesesOrdenados = sortDir === 'desc' ? [...meses].reverse() : meses
+            return (
+                <>
+                    <button type="button" className="col-filter-breadcrumb" onClick={() => setDrillYear(null)}>‹ Todos los años</button>
+                    {mesesOrdenados.map(m => {
+                        const dias = dateTree.get(drillYear)!.get(m)!
+                        const displays = dias.map(o => o.display)
+                        const seleccionados = displays.filter(d => value.includes(d)).length
+                        return (
+                            <div key={m} className={`col-filter-option ${seleccionados === displays.length ? 'selected' : ''}`} style={{ display: 'flex', alignItems: 'center' }}>
+                                <input type="checkbox" checked={seleccionados === displays.length} onChange={() => toggleGroup(displays)} />
+                                <span style={{ flex: 1, cursor: 'pointer' }} onClick={() => setDrillMonth(m)}>
+                                    {MESES[parseInt(m, 10) - 1]} {seleccionados > 0 && seleccionados < displays.length ? `(${seleccionados}/${displays.length})` : ''}
+                                </span>
+                                <span style={{ cursor: 'pointer', opacity: 0.5, padding: '0 0.2rem' }} onClick={() => setDrillMonth(m)}>›</span>
+                            </div>
+                        )
+                    })}
+                </>
+            )
+        }
+
+        return añosOrdenados.map(y => {
+            const displays = Array.from(dateTree.get(y)!.values()).flat().map(o => o.display)
+            const seleccionados = displays.filter(d => value.includes(d)).length
+            return (
+                <div key={y} className={`col-filter-option ${seleccionados === displays.length ? 'selected' : ''}`} style={{ display: 'flex', alignItems: 'center' }}>
+                    <input type="checkbox" checked={seleccionados === displays.length} onChange={() => toggleGroup(displays)} />
+                    <span style={{ flex: 1, cursor: 'pointer' }} onClick={() => setDrillYear(y)}>
+                        {y} {seleccionados > 0 && seleccionados < displays.length ? `(${seleccionados}/${displays.length})` : ''}
+                    </span>
+                    <span style={{ cursor: 'pointer', opacity: 0.5, padding: '0 0.2rem' }} onClick={() => setDrillYear(y)}>›</span>
+                </div>
+            )
+        })
+    }
 
     return (
         <div className="col-filter" ref={containerRef}>
-            <div className={`col-filter-trigger ${isOpen ? 'active' : ''} ${value.length ? 'has-value' : ''}`} onClick={() => setIsOpen(!isOpen)}>
+            <div className={`col-filter-trigger ${isOpen ? 'active' : ''} ${value.length ? 'has-value' : ''}`} onClick={abrir}>
                 <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
                 {value.length > 0 ? (
                     <X size={12} className="col-filter-clear" onClick={e => { e.stopPropagation(); onChange([]); setSearchTerm('') }} />
@@ -319,7 +414,9 @@ function ColumnFilterSelect({ options, value, onChange }: {
                         <button type="button" onClick={() => onChange([])}>Limpiar</button>
                     </div>
                     <div className="col-filter-options">
-                        {filteredOrdenado.length > 0 ? (
+                        {dateTree && !searchTerm ? (
+                            dateTree.size > 0 ? renderDrillDown() : <div className="col-filter-empty">Sin resultados</div>
+                        ) : filteredOrdenado.length > 0 ? (
                             filteredOrdenado.slice(0, 300).map(o => (
                                 <label key={o.display} className={`col-filter-option ${value.includes(o.display) ? 'selected' : ''}`}>
                                     <input type="checkbox" checked={value.includes(o.display)} onChange={() => toggle(o.display)} />
@@ -333,6 +430,72 @@ function ColumnFilterSelect({ options, value, onChange }: {
                 </div>
             )}
         </div>
+    )
+}
+
+// Texto de ayuda por columna de la tabla "Visualizar Archivo" — se ve al hacer clic en
+// el ícono (i) junto al título.
+const COLUMN_HELP: Record<string, string> = {
+    'Fecha Correo': 'Fecha en la que llegó el correo de SAP con esta variación de costo.',
+    'Tipo Doc.': 'Tipo de documento en SAP: Entrada de Mercacía, Orden de Compra o Precios de Entrega (lista de precios de proveedores del exterior).',
+    '# Doc.': 'Número del documento en SAP.',
+    'Fecha Contab.': 'Fecha en la que se contabilizó el movimiento en SAP.',
+    'Cod. Prov.': 'Código del proveedor en SAP.',
+    'Proveedor': 'Nombre del proveedor.',
+    'Cod. Ítem': 'Código del material/ítem en SAP.',
+    'Ítem': 'Descripción del material/ítem.',
+    'Precio': 'Precio al que se registró esta línea para este proveedor específico.',
+    'Precio Prom.': 'Precio promedio del código de material en almacén — puede incluir otros proveedores del mismo material, por eso puede diferir del Precio de esta fila sin que el proveedor haya cambiado su costo.',
+    'Dif. Precios': 'Diferencia entre el Precio y el Precio Promedio.',
+    '% Variación': 'Variación porcentual entre el Precio y el Precio Promedio — es la alerta que genera SAP, pero no siempre significa un cambio real de costo de este proveedor.',
+    'Penúltimo Precio': 'El precio anterior registrado para este mismo proveedor y material (no de cualquier proveedor).',
+    'Dif. Penúltimo': 'Diferencia entre el Precio actual y el Penúltimo Precio del mismo proveedor.',
+    '% Penúltimo': 'Variación porcentual entre el Precio actual y el Penúltimo Precio del mismo proveedor — esta sí refleja un cambio real de costo cuando es distinta de 0%.',
+    'Cantidad': 'Cantidad del material en esta línea.',
+    'Total Línea': 'Impacto económico de la línea (Cantidad × Precio) — se usa para priorizar los casos pendientes en "Analizar".',
+    'Precio Lista': 'Precio registrado en la lista de precios de SAP.',
+    '# Lista': 'Número de la lista de precios en SAP asociada a este material.',
+    'Observaciones': 'Comentario manual sobre esta fila — se guarda apenas sales del campo.',
+    'Estado': 'Estado de análisis de la fila: Pendiente, En análisis, Finalizado o No aplica.',
+    'Origen': 'Si el registro llegó por el correo diario de SAP o se cargó desde el Excel histórico.',
+}
+
+// Ícono "(i)" junto a un título de columna — al hacer clic muestra una ventana
+// emergente corta explicando qué significa esa columna.
+function ColumnHeaderHelp({ text }: { text: string }) {
+    const [open, setOpen] = useState(false)
+    const ref = useRef<HTMLSpanElement>(null)
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false)
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [])
+
+    return (
+        <span ref={ref} style={{ position: 'relative', display: 'inline-flex', marginLeft: '0.3rem', verticalAlign: 'middle' }}>
+            <Info
+                size={12}
+                style={{ cursor: 'pointer', opacity: open ? 1 : 0.45, color: open ? '#6366f1' : undefined }}
+                onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
+            />
+            {open && (
+                <div
+                    onClick={e => e.stopPropagation()}
+                    style={{
+                        position: 'absolute', top: '140%', left: 0, zIndex: 300,
+                        background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '0.5rem',
+                        padding: '0.65rem 0.8rem', fontSize: '0.72rem', fontWeight: 400, textTransform: 'none',
+                        letterSpacing: 'normal', color: 'hsl(var(--foreground))', width: 220,
+                        boxShadow: '0 12px 28px -6px rgba(0,0,0,0.25)', whiteSpace: 'normal', lineHeight: 1.4
+                    }}
+                >
+                    {text}
+                </div>
+            )}
+        </span>
     )
 }
 
@@ -1199,11 +1362,22 @@ function VariacionCostosContent() {
                             <table>
                                 <thead>
                                     <tr>
-                                        <th>Fecha Correo</th><th>Tipo Doc.</th><th># Doc.</th><th>Fecha Contab.</th>
-                                        <th>Cod. Prov.</th><th>Proveedor</th><th>Cod. Ítem</th><th>Ítem</th>
-                                        <th>Precio</th><th>Precio Prom.</th><th>Dif. Precios</th><th>% Variación</th>
-                                        <th>Penúltimo Precio</th><th>Dif. Penúltimo</th><th>% Penúltimo</th>
-                                        <th>Cantidad</th>
+                                        <th>Fecha Correo<ColumnHeaderHelp text={COLUMN_HELP['Fecha Correo']} /></th>
+                                        <th>Tipo Doc.<ColumnHeaderHelp text={COLUMN_HELP['Tipo Doc.']} /></th>
+                                        <th># Doc.<ColumnHeaderHelp text={COLUMN_HELP['# Doc.']} /></th>
+                                        <th>Fecha Contab.<ColumnHeaderHelp text={COLUMN_HELP['Fecha Contab.']} /></th>
+                                        <th>Cod. Prov.<ColumnHeaderHelp text={COLUMN_HELP['Cod. Prov.']} /></th>
+                                        <th>Proveedor<ColumnHeaderHelp text={COLUMN_HELP['Proveedor']} /></th>
+                                        <th>Cod. Ítem<ColumnHeaderHelp text={COLUMN_HELP['Cod. Ítem']} /></th>
+                                        <th>Ítem<ColumnHeaderHelp text={COLUMN_HELP['Ítem']} /></th>
+                                        <th>Precio<ColumnHeaderHelp text={COLUMN_HELP['Precio']} /></th>
+                                        <th>Precio Prom.<ColumnHeaderHelp text={COLUMN_HELP['Precio Prom.']} /></th>
+                                        <th>Dif. Precios<ColumnHeaderHelp text={COLUMN_HELP['Dif. Precios']} /></th>
+                                        <th>% Variación<ColumnHeaderHelp text={COLUMN_HELP['% Variación']} /></th>
+                                        <th>Penúltimo Precio<ColumnHeaderHelp text={COLUMN_HELP['Penúltimo Precio']} /></th>
+                                        <th>Dif. Penúltimo<ColumnHeaderHelp text={COLUMN_HELP['Dif. Penúltimo']} /></th>
+                                        <th>% Penúltimo<ColumnHeaderHelp text={COLUMN_HELP['% Penúltimo']} /></th>
+                                        <th>Cantidad<ColumnHeaderHelp text={COLUMN_HELP['Cantidad']} /></th>
                                         <th
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
                                             onClick={() => setArchivoSortTotalLinea(s => s === 'desc' ? 'asc' : s === 'asc' ? null : 'desc')}
@@ -1212,11 +1386,14 @@ function VariacionCostosContent() {
                                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
                                                 Total Línea
                                                 {archivoSortTotalLinea === 'desc' ? <ChevronDown size={12} /> : archivoSortTotalLinea === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} style={{ opacity: 0.25 }} />}
+                                                <ColumnHeaderHelp text={COLUMN_HELP['Total Línea']} />
                                             </span>
                                         </th>
-                                        <th>Precio Lista</th><th># Lista</th>
-                                        <th style={{ minWidth: 180 }}>Observaciones</th>
-                                        <th style={{ minWidth: 130 }}>Estado</th><th>Origen</th>
+                                        <th>Precio Lista<ColumnHeaderHelp text={COLUMN_HELP['Precio Lista']} /></th>
+                                        <th># Lista<ColumnHeaderHelp text={COLUMN_HELP['# Lista']} /></th>
+                                        <th style={{ minWidth: 180 }}>Observaciones<ColumnHeaderHelp text={COLUMN_HELP['Observaciones']} /></th>
+                                        <th style={{ minWidth: 130 }}>Estado<ColumnHeaderHelp text={COLUMN_HELP['Estado']} /></th>
+                                        <th>Origen<ColumnHeaderHelp text={COLUMN_HELP['Origen']} /></th>
                                     </tr>
                                     <tr>
                                         {ARCHIVO_FILTER_COLUMNS.map(key => (
@@ -1225,6 +1402,7 @@ function VariacionCostosContent() {
                                                     options={archivoColumnOptions[key] || []}
                                                     value={archivoFilters[key] || []}
                                                     onChange={v => setArchivoFilters(prev => ({ ...prev, [key]: v }))}
+                                                    isDate={key === 'fecha_correo' || key === 'fecha_contabilizacion'}
                                                 />
                                             </th>
                                         ))}
