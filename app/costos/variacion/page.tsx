@@ -244,9 +244,13 @@ function ColumnFilterSelect({ options, value, onChange }: {
 }) {
     const [isOpen, setIsOpen] = useState(false)
     const [searchTerm, setSearchTerm] = useState('')
+    const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
     const containerRef = useRef<HTMLDivElement>(null)
 
+    // "options" ya viene ordenado ascendente (numérico/cronológico o alfabético según
+    // la columna) — para descendente simplemente se invierte, sin recalcular nada.
     const filtered = options.filter(o => o.display.toLowerCase().includes(searchTerm.toLowerCase()))
+    const filteredOrdenado = sortDir === 'desc' ? [...filtered].reverse() : filtered
     const numericOptions = options.filter((o): o is { display: string; raw: number } => typeof o.raw === 'number')
     const hasPositivos = numericOptions.some(o => o.raw > 0)
     const hasNegativos = numericOptions.some(o => o.raw < 0)
@@ -290,19 +294,33 @@ function ColumnFilterSelect({ options, value, onChange }: {
                         onChange={e => setSearchTerm(e.target.value)}
                         onClick={e => e.stopPropagation()}
                     />
-                    {(filtered.length > 0 || hasPositivos || hasNegativos) && (
-                        <div className="col-filter-actions">
-                            {filtered.length > 0 && (
-                                <button type="button" onClick={() => onChange(Array.from(new Set([...value, ...filtered.map(o => o.display)])))}>Todo</button>
-                            )}
-                            {hasNegativos && <button type="button" onClick={() => selectOnlySign('pos')}>Solo positivos</button>}
-                            {hasPositivos && <button type="button" onClick={() => selectOnlySign('neg')}>Solo negativos</button>}
-                            <button type="button" onClick={() => onChange([])}>Limpiar</button>
-                        </div>
-                    )}
+                    <div className="col-filter-actions">
+                        <button
+                            type="button"
+                            style={sortDir === 'asc' ? { color: '#4338ca' } : { opacity: 0.5 }}
+                            onClick={() => setSortDir('asc')}
+                            title="Ascendente"
+                        >
+                            <ChevronUp size={11} style={{ verticalAlign: 'text-bottom' }} /> Asc.
+                        </button>
+                        <button
+                            type="button"
+                            style={sortDir === 'desc' ? { color: '#4338ca' } : { opacity: 0.5 }}
+                            onClick={() => setSortDir('desc')}
+                            title="Descendente"
+                        >
+                            <ChevronDown size={11} style={{ verticalAlign: 'text-bottom' }} /> Desc.
+                        </button>
+                        {filtered.length > 0 && (
+                            <button type="button" onClick={() => onChange(Array.from(new Set([...value, ...filtered.map(o => o.display)])))}>Todo</button>
+                        )}
+                        {hasNegativos && <button type="button" onClick={() => selectOnlySign('pos')}>Solo positivos</button>}
+                        {hasPositivos && <button type="button" onClick={() => selectOnlySign('neg')}>Solo negativos</button>}
+                        <button type="button" onClick={() => onChange([])}>Limpiar</button>
+                    </div>
                     <div className="col-filter-options">
-                        {filtered.length > 0 ? (
-                            filtered.slice(0, 300).map(o => (
+                        {filteredOrdenado.length > 0 ? (
+                            filteredOrdenado.slice(0, 300).map(o => (
                                 <label key={o.display} className={`col-filter-option ${value.includes(o.display) ? 'selected' : ''}`}>
                                     <input type="checkbox" checked={value.includes(o.display)} onChange={() => toggle(o.display)} />
                                     <span>{o.display}</span>
