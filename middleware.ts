@@ -33,7 +33,7 @@ export async function middleware(request: NextRequest) {
 
     // Protected routes logic
     // Public routes that don't require authentication
-    const publicPages = ['/login', '/forgot-password', '/reset-password', '/auth/callback']
+    const publicPages = ['/login', '/forgot-password', '/reset-password', '/auth/callback', '/api/auth/reset-password']
     const isPublicPage = publicPages.some(page => request.nextUrl.pathname.startsWith(page)) || request.nextUrl.pathname === '/'
     const isProtectedPage = !isPublicPage
 
