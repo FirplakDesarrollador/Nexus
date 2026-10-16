@@ -12,6 +12,7 @@ export default function LoginPage() {
     const [view, setView] = useState<AuthView>('login')
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
+    const [confirmPassword, setConfirmPassword] = useState('')
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [message, setMessage] = useState<string | null>(null)
@@ -96,11 +97,20 @@ export default function LoginPage() {
 
                 router.push('/home')
             } else if (view === 'forgot') {
-                const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                    redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+                if (password !== confirmPassword) {
+                    setError('Las contraseñas no coinciden')
+                    return
+                }
+                const res = await fetch('/api/auth/reset-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, newPassword: password })
                 })
-                if (error) throw error
-                setMessage('Se ha enviado un correo de recuperación.')
+                const json = await res.json()
+                if (!res.ok) throw new Error(json.error || 'No se pudo cambiar la contraseña')
+                setMessage('Tu contraseña fue actualizada. Ya puedes iniciar sesión con la nueva.')
+                setPassword('')
+                setConfirmPassword('')
                 setView('login')
             }
         } catch (err: any) {
@@ -119,7 +129,7 @@ export default function LoginPage() {
     const buttonTexts = {
         login: 'Iniciar Sesión',
         register: 'Registrarse',
-        forgot: 'Enviar enlace'
+        forgot: 'Cambiar contraseña'
     }
 
     return (
@@ -145,27 +155,39 @@ export default function LoginPage() {
                         />
                     </div>
 
-                    {view !== 'forgot' && (
+                    <div className="form-group">
+                        <label>{view === 'forgot' ? 'Nueva Contraseña' : 'Contraseña'}</label>
+                        <input
+                            type="password"
+                            className="form-control"
+                            placeholder="••••••••"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            required
+                        />
+                        {view === 'login' && (
+                            <div style={{ textAlign: 'right', marginTop: '0.5rem' }}>
+                                <span
+                                    onClick={() => { setView('forgot'); setPassword(''); setConfirmPassword(''); setError(null); setMessage(null) }}
+                                    style={{ color: 'hsl(var(--primary))', fontSize: '0.8125rem', cursor: 'pointer' }}
+                                >
+                                    ¿Olvidaste tu contraseña?
+                                </span>
+                            </div>
+                        )}
+                    </div>
+
+                    {view === 'forgot' && (
                         <div className="form-group">
-                            <label>Contraseña</label>
+                            <label>Confirmar Contraseña</label>
                             <input
                                 type="password"
                                 className="form-control"
                                 placeholder="••••••••"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
                                 required
                             />
-                            {view === 'login' && (
-                                <div style={{ textAlign: 'right', marginTop: '0.5rem' }}>
-                                    <span 
-                                        onClick={() => setView('forgot')} 
-                                        style={{ color: 'hsl(var(--primary))', fontSize: '0.8125rem', cursor: 'pointer' }}
-                                    >
-                                        ¿Olvidaste tu contraseña?
-                                    </span>
-                                </div>
-                            )}
                         </div>
                     )}
 
