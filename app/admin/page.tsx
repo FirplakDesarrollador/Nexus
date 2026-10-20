@@ -319,12 +319,15 @@ export default function AdminDashboard() {
             const { data: { user } } = await supabase.auth.getUser()
             
             // 1. Update the request status and current observation
+            // Rechazada se cierra de una vez (no pasa por "Finalizar Gestión" — eso es
+            // solo para Completada, que necesita el cierre de compra con proveedor/valor).
             const { error: updateError } = await supabase.schema('nexus')
                 .from('solicitudes')
-                .update({ 
+                .update({
                     estado_actual: newStatus,
                     observacion_actual: observation || null,
-                    updated_at: new Date().toISOString()
+                    updated_at: new Date().toISOString(),
+                    ...(newStatus === 'Rechazada' ? { closed_at: new Date().toISOString() } : {})
                 })
                 .eq('id', id)
 
