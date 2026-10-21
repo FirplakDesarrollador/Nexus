@@ -535,7 +535,10 @@ function VariacionCostosContent() {
 
     const [tab, setTab] = useState<'historico' | 'archivo' | 'analisis'>('historico')
     const [ultimoRun, setUltimoRun] = useState<AnalisisRun | null>(null)
-    const [mostrarPendientes, setMostrarPendientes] = useState(false)
+    // Dos vistas dentro de "Analizar": la bandeja de Pendiente/En análisis (motor
+    // automático, solo Entrada de Mercacía) y la de Órdenes de Compra (precio vs precio
+    // de lista SAP, sin pasar por el motor) — solo una visible a la vez.
+    const [vistaAnalizarActiva, setVistaAnalizarActiva] = useState<'pendientes' | 'ordenes_compra' | null>(null)
     const [expandedPendienteId, setExpandedPendienteId] = useState<string | null>(null)
     const [confirmCambioEstado, setConfirmCambioEstado] = useState<{ row: VariacionRow; nuevoEstado: string } | null>(null)
     const [vistaBandeja, setVistaBandeja] = useState<'Pendiente' | 'En análisis'>('Pendiente')
@@ -737,6 +740,51 @@ function VariacionCostosContent() {
             })
     }, [pendientesBase, pendFilters])
 
+    // Vista "Analizar Órdenes de Compra": no pasa por el motor (ese solo clasifica
+    // Entrada de Mercacía) — es una comparación directa precio pedido vs precio de
+    // lista SAP (ya viene en el correo, columna "precio_lista_precios"), con el mismo
+    // patrón de filtros cruzados que la bandeja de Pendientes.
+    //
+    // Solo aplica a filas sincronizadas desde que se activó esta vista en adelante: en
+    // el histórico previo CASI TODAS las Orden de Compra "difieren" del precio de lista
+    // (incluso 30x-160x) — parece un problema de unidades/presentación en esos datos
+    // viejos, no una variación real. Revisar antes de quitar este corte.
+    const ocProveedorDisplay = (r: VariacionRow) => r.descripcion_proveedor || r.cod_proveedor || 'Sin proveedor'
+    const ocItemDisplay = (r: VariacionRow) => r.descripcion_item || r.cod_item || 'Sin ítem'
+
+    const [ocFilters, setOcFilters] = useState<{ proveedor: string[]; item: string[] }>({ proveedor: [], item: [] })
+
+    const ORDENES_COMPRA_ANALISIS_DESDE = new Date('2026-10-21T00:00:00-05:00').getTime()
+
+    const ordenesCompraBase = useMemo(() => rows.filter(r =>
+        r.tipo_documento === 'Orden de Compra' &&
+        r.precio !== null && r.precio_lista_precios !== null &&
+        Math.abs((r.precio ?? 0) - (r.precio_lista_precios ?? 0)) > 0.01 &&
+        !!r.synced_at && new Date(r.synced_at).getTime() >= ORDENES_COMPRA_ANALISIS_DESDE
+    ), [rows])
+
+    const aplicarFiltrosOC = (base: VariacionRow[], filtros: typeof ocFilters, excluir?: keyof typeof ocFilters) => {
+        return base.filter(r => {
+            if (excluir !== 'proveedor' && filtros.proveedor.length && !filtros.proveedor.includes(ocProveedorDisplay(r))) return false
+            if (excluir !== 'item' && filtros.item.length && !filtros.item.includes(ocItemDisplay(r))) return false
+            return true
+        })
+    }
+
+    const buildOptionsOC = (excluir: keyof typeof ocFilters, display: (r: VariacionRow) => string) => {
+        const set = new Set<string>()
+        aplicarFiltrosOC(ordenesCompraBase, ocFilters, excluir).forEach(r => set.add(display(r)))
+        return Array.from(set).sort().map(v => ({ display: v, raw: null as number | string | null }))
+    }
+
+    const ocProveedorOptions = useMemo(() => buildOptionsOC('proveedor', ocProveedorDisplay), [ordenesCompraBase, ocFilters])
+    const ocItemOptions = useMemo(() => buildOptionsOC('item', ocItemDisplay), [ordenesCompraBase, ocFilters])
+
+    const ordenesCompraOrdenadas = useMemo(() => {
+        return aplicarFiltrosOC(ordenesCompraBase, ocFilters)
+            .sort((a, b) => Math.abs((b.precio ?? 0) - (b.precio_lista_precios ?? 0)) - Math.abs((a.precio ?? 0) - (a.precio_lista_precios ?? 0)))
+    }, [ordenesCompraBase, ocFilters])
+
     const totalRegistros = filtered.length
     const incrementos = filtered.filter(r => (r.porc_variacion ?? 0) > 0).length
     const decrementos = filtered.filter(r => (r.porc_variacion ?? 0) < 0).length
@@ -932,15 +980,28 @@ function VariacionCostosContent() {
                                         Módulo en desarrollo
                                     </button>
                                 ) : (
-                                    <button className="btn-primary" style={{ width: 'auto' }} onClick={() => setMostrarPendientes(v => !v)}>
-                                        {mostrarPendientes ? 'Ocultar casos pendientes' : 'Ver casos pendientes'}
-                                    </button>
+                                    <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                                        <button
+                                            className="btn-primary"
+                                            style={{ width: 'auto' }}
+                                            onClick={() => setVistaAnalizarActiva(v => v === 'pendientes' ? null : 'pendientes')}
+                                        >
+                                            {vistaAnalizarActiva === 'pendientes' ? 'Ocultar casos pendientes' : 'Ver casos pendientes'}
+                                        </button>
+                                        <button
+                                            className="btn-primary"
+                                            style={{ width: 'auto' }}
+                                            onClick={() => setVistaAnalizarActiva(v => v === 'ordenes_compra' ? null : 'ordenes_compra')}
+                                        >
+                                            {vistaAnalizarActiva === 'ordenes_compra' ? 'Ocultar Órdenes de Compra' : 'Analizar Órdenes de Compra'}
+                                        </button>
+                                    </div>
                                 )}
                             </>
                         )}
                     </div>
 
-                    {mostrarPendientes && (
+                    {vistaAnalizarActiva === 'pendientes' && (
                         <div style={sectionStyle}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.5rem' }}>
                                 <h2 style={{ margin: 0, fontSize: '1rem' }}>
@@ -1070,6 +1131,98 @@ function VariacionCostosContent() {
                                                                             {r.ultimo_costo_historico !== null ? <>{fmt(r.ultimo_costo_historico)} ({fmtDate(r.fecha_ultimo_costo_historico)})</> : '—'}
                                                                         </div>
                                                                         <div><strong># Documento:</strong> {r.numero_documento || '—'}</div>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </Fragment>
+                                            )
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {vistaAnalizarActiva === 'ordenes_compra' && (
+                        <div style={sectionStyle}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                                <h2 style={{ margin: 0, fontSize: '1rem' }}>
+                                    Órdenes de Compra con diferencia vs precio de lista ({ordenesCompraOrdenadas.length.toLocaleString('es-CO')} de {ordenesCompraBase.length.toLocaleString('es-CO')})
+                                </h2>
+                                {(ocFilters.proveedor.length > 0 || ocFilters.item.length > 0) && (
+                                    <button className="action-btn" style={{ fontSize: '0.78rem' }} onClick={() => setOcFilters({ proveedor: [], item: [] })}>Limpiar filtros</button>
+                                )}
+                            </div>
+                            <p style={{ margin: '0 0 1.25rem', fontSize: '0.78rem', color: 'hsl(var(--muted-foreground))' }}>
+                                Órdenes de Compra cuyo precio no coincide con el precio de lista SAP, ordenadas por mayor diferencia. Solo incluye registros sincronizados desde el 21 de octubre de 2026 en adelante (el histórico previo no se filtra aquí). Los filtros se cruzan entre sí.
+                            </p>
+                            <div className="admin-table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th></th><th>Código</th><th>Proveedor</th><th>Ítem</th>
+                                            <th>Precio Orden</th><th>Precio Lista</th><th>Diferencia</th><th>% Diferencia</th>
+                                            <th style={{ minWidth: 180 }}>Observación</th>
+                                        </tr>
+                                        <tr>
+                                            <th></th>
+                                            <th></th>
+                                            <th style={{ padding: '0.3rem' }}>
+                                                <ColumnFilterSelect options={ocProveedorOptions} value={ocFilters.proveedor} onChange={v => setOcFilters(p => ({ ...p, proveedor: v }))} />
+                                            </th>
+                                            <th style={{ padding: '0.3rem' }}>
+                                                <ColumnFilterSelect options={ocItemOptions} value={ocFilters.item} onChange={v => setOcFilters(p => ({ ...p, item: v }))} />
+                                            </th>
+                                            <th></th><th></th><th></th><th></th><th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {ordenesCompraOrdenadas.length === 0 ? (
+                                            <tr><td colSpan={9} style={{ textAlign: 'center', padding: '2rem', opacity: 0.5 }}>Sin órdenes de compra con diferencia de precio con estos filtros.</td></tr>
+                                        ) : ordenesCompraOrdenadas.map(r => {
+                                            const expanded = expandedPendienteId === r.id
+                                            const diferencia = (r.precio ?? 0) - (r.precio_lista_precios ?? 0)
+                                            const diferenciaPct = r.precio_lista_precios ? diferencia / r.precio_lista_precios : null
+                                            return (
+                                                <Fragment key={r.id}>
+                                                    <tr>
+                                                        <td style={{ cursor: 'pointer' }} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>
+                                                            {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                                        </td>
+                                                        <td style={{ fontSize: '0.8rem', cursor: 'pointer' }} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>{r.cod_item || '—'}</td>
+                                                        <td style={{ fontSize: '0.8rem', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }} title={ocProveedorDisplay(r)} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>
+                                                            {ocProveedorDisplay(r)}
+                                                        </td>
+                                                        <td style={{ fontSize: '0.8rem', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }} title={ocItemDisplay(r)} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>
+                                                            {ocItemDisplay(r)}
+                                                        </td>
+                                                        <td style={{ fontSize: '0.85rem', cursor: 'pointer' }} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>{fmt(r.precio)}</td>
+                                                        <td style={{ fontSize: '0.85rem', cursor: 'pointer' }} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>{fmt(r.precio_lista_precios)}</td>
+                                                        <td style={{ fontWeight: 600, fontSize: '0.85rem', color: diferencia > 0 ? '#ef4444' : '#10b981', cursor: 'pointer' }} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>{fmt(diferencia)}</td>
+                                                        <td style={{ fontWeight: 600, fontSize: '0.85rem', color: diferencia > 0 ? '#ef4444' : '#10b981', cursor: 'pointer' }} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>{fmtPct(diferenciaPct)}</td>
+                                                        <td>
+                                                            <input
+                                                                key={`oc-obs-${r.id}`}
+                                                                className="form-control"
+                                                                style={{ fontSize: '0.78rem', padding: '0.35rem 0.5rem', minWidth: 160 }}
+                                                                defaultValue={r.obs_nl || ''}
+                                                                placeholder="Agregar observación..."
+                                                                onBlur={e => { if (e.target.value !== (r.obs_nl || '')) updateRow(r.id, 'obs_nl', e.target.value) }}
+                                                            />
+                                                        </td>
+                                                    </tr>
+                                                    {expanded && (
+                                                        <tr>
+                                                            <td colSpan={9} style={{ background: 'hsla(204, 38%, 24%, 0.03)' }}>
+                                                                <div style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem' }}>
+                                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
+                                                                        <div><strong>Fecha:</strong> {fmtDate(r.fecha_correo)}</div>
+                                                                        <div><strong>Cantidad:</strong> {r.cantidad ?? '—'}</div>
+                                                                        <div><strong>Total Línea:</strong> {fmt(r.total_linea)}</div>
+                                                                        <div><strong># Documento:</strong> {r.numero_documento || '—'}</div>
+                                                                        <div><strong># Lista de Precio:</strong> {r.numero_lista_precio || '—'}</div>
                                                                     </div>
                                                                 </div>
                                                             </td>
