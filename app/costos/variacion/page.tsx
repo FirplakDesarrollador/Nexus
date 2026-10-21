@@ -1162,11 +1162,12 @@ function VariacionCostosContent() {
                                 <table>
                                     <thead>
                                         <tr>
-                                            <th></th><th>Código</th><th>Proveedor</th><th>Ítem</th>
-                                            <th>Precio Orden</th><th>Precio Lista</th><th>Diferencia</th><th>% Diferencia</th>
+                                            <th></th><th># Documento</th><th>Código</th><th>Proveedor</th><th>Ítem</th>
+                                            <th>Precio Orden</th><th>Precio Lista</th><th>Diferencia</th>
                                             <th style={{ minWidth: 180 }}>Observación</th>
                                         </tr>
                                         <tr>
+                                            <th></th>
                                             <th></th>
                                             <th></th>
                                             <th style={{ padding: '0.3rem' }}>
@@ -1175,7 +1176,7 @@ function VariacionCostosContent() {
                                             <th style={{ padding: '0.3rem' }}>
                                                 <ColumnFilterSelect options={ocItemOptions} value={ocFilters.item} onChange={v => setOcFilters(p => ({ ...p, item: v }))} />
                                             </th>
-                                            <th></th><th></th><th></th><th></th><th></th>
+                                            <th></th><th></th><th></th><th></th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -1184,13 +1185,13 @@ function VariacionCostosContent() {
                                         ) : ordenesCompraOrdenadas.map(r => {
                                             const expanded = expandedPendienteId === r.id
                                             const diferencia = (r.precio ?? 0) - (r.precio_lista_precios ?? 0)
-                                            const diferenciaPct = r.precio_lista_precios ? diferencia / r.precio_lista_precios : null
                                             return (
                                                 <Fragment key={r.id}>
                                                     <tr>
                                                         <td style={{ cursor: 'pointer' }} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>
                                                             {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                                                         </td>
+                                                        <td style={{ fontSize: '0.8rem', cursor: 'pointer' }} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>{r.numero_documento || '—'}</td>
                                                         <td style={{ fontSize: '0.8rem', cursor: 'pointer' }} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>{r.cod_item || '—'}</td>
                                                         <td style={{ fontSize: '0.8rem', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }} title={ocProveedorDisplay(r)} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>
                                                             {ocProveedorDisplay(r)}
@@ -1201,7 +1202,6 @@ function VariacionCostosContent() {
                                                         <td style={{ fontSize: '0.85rem', cursor: 'pointer' }} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>{fmt(r.precio)}</td>
                                                         <td style={{ fontSize: '0.85rem', cursor: 'pointer' }} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>{fmt(r.precio_lista_precios)}</td>
                                                         <td style={{ fontWeight: 600, fontSize: '0.85rem', color: diferencia > 0 ? '#ef4444' : '#10b981', cursor: 'pointer' }} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>{fmt(diferencia)}</td>
-                                                        <td style={{ fontWeight: 600, fontSize: '0.85rem', color: diferencia > 0 ? '#ef4444' : '#10b981', cursor: 'pointer' }} onClick={() => setExpandedPendienteId(expanded ? null : r.id)}>{fmtPct(diferenciaPct)}</td>
                                                         <td>
                                                             <input
                                                                 key={`oc-obs-${r.id}`}
@@ -1221,7 +1221,7 @@ function VariacionCostosContent() {
                                                                         <div><strong>Fecha:</strong> {fmtDate(r.fecha_correo)}</div>
                                                                         <div><strong>Cantidad:</strong> {r.cantidad ?? '—'}</div>
                                                                         <div><strong>Total Línea:</strong> {fmt(r.total_linea)}</div>
-                                                                        <div><strong># Documento:</strong> {r.numero_documento || '—'}</div>
+                                                                        <div><strong>% Diferencia:</strong> {fmtPct(r.precio_lista_precios ? ((r.precio ?? 0) - (r.precio_lista_precios ?? 0)) / r.precio_lista_precios : null)}</div>
                                                                         <div><strong># Lista de Precio:</strong> {r.numero_lista_precio || '—'}</div>
                                                                     </div>
                                                                 </div>
