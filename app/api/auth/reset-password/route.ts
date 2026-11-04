@@ -11,14 +11,15 @@ function createAdminClient() {
     return createClient(url, serviceKey, { auth: { persistSession: false } })
 }
 
-async function findUserByEmail(supabaseUrl: string, serviceKey: string, email: string) {
-    const res = await fetch(`${supabaseUrl}/auth/v1/admin/users?email=${encodeURIComponent(email)}`, {
-        headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` }
-    })
-    if (!res.ok) throw new Error(`Error buscando el usuario: ${res.status} ${await res.text()}`)
-    const json = await res.json()
-    const users = json.users ?? []
-    return users.find((u: any) => u.email?.toLowerCase() === email.toLowerCase()) ?? null
+// El endpoint admin de "listar/buscar usuarios" (/admin/users, con o sin filtros) está
+// devolviendo 500 "Database error finding users" del lado de Supabase — se confirmó
+// llamándolo directo por REST, sin pasar por este código. En cambio, buscar por ID
+// exacto (getUserById) sí funciona. Por eso el id se saca de nexus.users (ya se guarda
+// ahí desde el primer login de cada usuario) en vez de list/search.
+async function findUserIdByEmail(supabaseAdmin: ReturnType<typeof createAdminClient>, email: string) {
+    const { data, error } = await supabaseAdmin.schema('nexus').from('users').select('id').eq('email', email).maybeSingle()
+    if (error) throw new Error(`Error buscando el usuario: ${error.message}`)
+    return data?.id ?? null
 }
 
 export async function POST(req: NextRequest) {
@@ -32,16 +33,14 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'La contraseña debe tener al menos 6 caracteres' }, { status: 400 })
         }
 
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-        const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
         const supabaseAdmin = createAdminClient()
 
-        const user = await findUserByEmail(supabaseUrl, serviceKey, email.trim().toLowerCase())
-        if (!user) {
-            return NextResponse.json({ error: 'No se encontró una cuenta con ese correo' }, { status: 404 })
+        const userId = await findUserIdByEmail(supabaseAdmin, email.trim().toLowerCase())
+        if (!userId) {
+            return NextResponse.json({ error: 'No se encontró una cuenta con ese correo. Si nunca has iniciado sesión en Nexus, hazlo primero y luego podrás recuperar tu contraseña.' }, { status: 404 })
         }
 
-        const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(user.id, { password: newPassword })
+        const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, { password: newPassword })
         if (updateError) throw new Error(updateError.message)
 
         console.log(`[auth/reset-password] Contraseña cambiada para ${email.trim().toLowerCase()} — ${new Date().toISOString()}`)
