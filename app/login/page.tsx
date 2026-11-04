@@ -20,6 +20,14 @@ export default function LoginPage() {
     const supabase = createClient()
     const router = useRouter()
 
+    const switchView = (next: AuthView) => {
+        setView(next)
+        setPassword('')
+        setConfirmPassword('')
+        setError(null)
+        setMessage(null)
+    }
+
     const syncProfile = async (user: any, emailStr: string) => {
         // Buscar datos previos en el esquema público de la base de datos "Servicios y comercial"
         const { data: publicUser } = await supabase
@@ -168,7 +176,7 @@ export default function LoginPage() {
                         {view === 'login' && (
                             <div style={{ textAlign: 'right', marginTop: '0.5rem' }}>
                                 <span
-                                    onClick={() => { setView('forgot'); setPassword(''); setConfirmPassword(''); setError(null); setMessage(null) }}
+                                    onClick={() => switchView('forgot')}
                                     style={{ color: 'hsl(var(--primary))', fontSize: '0.8125rem', cursor: 'pointer' }}
                                 >
                                     ¿Olvidaste tu contraseña?
@@ -210,13 +218,13 @@ export default function LoginPage() {
 
                 <p className="footer-text">
                     {view === 'login' && (
-                        <>¿No tienes cuenta? <span onClick={() => setView('register')}>Regístrate ahora</span></>
+                        <>¿No tienes cuenta? <span onClick={() => switchView('register')}>Regístrate ahora</span></>
                     )}
                     {view === 'register' && (
-                        <>¿Ya tienes cuenta? <span onClick={() => setView('login')}>Inicia sesión aquí</span></>
+                        <>¿Ya tienes cuenta? <span onClick={() => switchView('login')}>Inicia sesión aquí</span></>
                     )}
                     {view === 'forgot' && (
-                        <>¿Recordaste tu contraseña? <span onClick={() => setView('login')}>Volver al login</span></>
+                        <>¿Recordaste tu contraseña? <span onClick={() => switchView('login')}>Volver al login</span></>
                     )}
                 </p>
             </div>
